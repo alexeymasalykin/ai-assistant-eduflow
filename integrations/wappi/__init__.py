@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from integrations.wappi.channel import Channel
 from integrations.wappi.incoming import WappiIncomingHandler
 from integrations.wappi.outgoing import WappiOutgoingHandler
 from integrations.wappi.templates import file_message, media_message, text_message
 
 __all__ = [
+    "Channel",
     "WappiIncomingHandler",
     "WappiOutgoingHandler",
     "text_message",

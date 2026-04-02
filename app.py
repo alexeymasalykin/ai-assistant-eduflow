@@ -125,7 +125,11 @@ async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
 
         # Initialize Wappi handlers
         logger.info("initializing_wappi_handlers")
-        wappi_incoming = WappiIncomingHandler(db=db, bitrix=bitrix_client)
+        wappi_incoming = WappiIncomingHandler(
+            db=db,
+            bitrix=bitrix_client,
+            max_profile_id=settings.wappi_max_profile_id,
+        )
         wappi_outgoing = WappiOutgoingHandler(config=settings, http_client=http_client)
 
         # Initialize orchestrator

@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     # Wappi
     wappi_api_token: str = ""
     wappi_profile_id: str = ""
+    wappi_max_profile_id: str = ""  # Profile ID for MAX Messenger in Wappi
 
     # Database
     postgres_dsn: str = "postgresql://postgres:postgres@db:5432/eduflow"

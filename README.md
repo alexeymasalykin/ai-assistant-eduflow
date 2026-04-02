@@ -12,7 +12,7 @@ AI-ассистент для платформы онлайн-обучения Ed
 - Поддержка OpenAI и YandexGPT (Protocol abstraction)
 - RAG с ChromaDB для базы знаний (200+ статей)
 - Интеграция с Bitrix24 CRM (статусы сделок, контакты, история)
-- Webhook для Telegram/WhatsApp (через Wappi Direct)
+- Мультиканальность: Telegram + MAX Messenger (через Wappi, различение по profile_id)
 - Структурированное логирование JSON (маскирование PII)
 - Защита от prompt injection, XSS, SQL injection
 - Асинхронная архитектура (FastAPI + asyncpg + asyncio)
@@ -24,9 +24,9 @@ AI-ассистент для платформы онлайн-обучения Ed
 ## Архитектура
 
 ```
-Входящее сообщение (Telegram/WhatsApp)
+Входящее сообщение (Telegram / MAX Messenger)
     |
-[Wappi Webhook] --> validation, deduplication, user mapping
+[Wappi Webhook] --> channel detection, validation, deduplication, user mapping
     |
 [Orchestrator] --> FAQ short-answer check
     |

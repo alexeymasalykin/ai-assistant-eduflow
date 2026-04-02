@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING, Any
 
 import structlog
 
+from integrations.wappi.channel import Channel
+
 if TYPE_CHECKING:
     import asyncpg
 
@@ -15,11 +17,17 @@ logger = structlog.get_logger()
 
 
 class WappiIncomingHandler:
-    """Process incoming messages from Wappi webhook (Telegram/WhatsApp)."""
+    """Process incoming messages from Wappi webhook (Telegram/WhatsApp/MAX)."""
 
-    def __init__(self, db: Database, bitrix: BitrixClient) -> None:
+    def __init__(
+        self,
+        db: Database,
+        bitrix: BitrixClient,
+        max_profile_id: str = "",
+    ) -> None:
         self._pool: asyncpg.Pool = db.pool
         self._bitrix = bitrix
+        self._max_profile_id = max_profile_id
         self._dedup_cache: dict[str, datetime] = {}  # {message_id: timestamp}
         self._dedup_ttl_seconds = 60
 
@@ -78,10 +86,27 @@ class WappiIncomingHandler:
         self._cleanup_dedup_cache()
         self._dedup_cache[message_id] = datetime.now()
 
+    def _detect_channel(self, payload: dict[str, Any]) -> Channel:
+        """Detect messaging channel from webhook payload.
+
+        Uses profile_id to distinguish MAX Messenger from Telegram.
+        Both channels have numeric chat_id, so profile_id is the
+        only reliable signal.
+
+        Args:
+            payload: Webhook payload from Wappi.
+
+        Returns:
+            Detected Channel (TELEGRAM or MAX).
+        """
+        profile_id = str(payload.get("profile_id", ""))
+        return Channel.from_profile_id(profile_id, self._max_profile_id)
+
     async def _find_or_create_user_mapping(
         self,
         chat_id: str,
         phone: str,
+        channel: Channel = Channel.TELEGRAM,
     ) -> tuple[str, str]:
         """Find existing user mapping or create new one.
 
@@ -125,7 +150,7 @@ class WappiIncomingHandler:
                 chat_id,
                 deal_id,
                 contact_id,
-                "telegram",
+                channel.value,
                 phone,
             )
             logger.info("user_mapping_created_from_bitrix_deal", chat_id=chat_id, deal_id=deal_id)
@@ -137,6 +162,9 @@ class WappiIncomingHandler:
 
     async def process_message(self, payload: dict[str, Any]) -> tuple[str, str] | None:
         """Process incoming Wappi webhook message.
+
+        Supports Telegram and MAX Messenger channels. Channel is detected
+        automatically by profile_id.
 
         Args:
             payload: Webhook payload from Wappi.
@@ -158,6 +186,9 @@ class WappiIncomingHandler:
         payload["timestamp"]
         message_type: str = payload["message_type"]
 
+        # Detect channel (Telegram vs MAX Messenger)
+        channel = self._detect_channel(payload)
+
         # Check deduplication
         if self._is_duplicate(message_id):
             logger.info("message_skipped_duplicate", message_id=message_id, chat_id=chat_id)
@@ -170,6 +201,7 @@ class WappiIncomingHandler:
         chat_id_result, phone_result = await self._find_or_create_user_mapping(
             chat_id=chat_id,
             phone=phone,
+            channel=channel,
         )
 
         # Log incoming message
@@ -187,6 +219,7 @@ class WappiIncomingHandler:
             message_id=message_id,
             chat_id=chat_id_result,
             message_type=message_type,
+            channel=channel.value,
         )
 
         return (chat_id_result, phone_result)
