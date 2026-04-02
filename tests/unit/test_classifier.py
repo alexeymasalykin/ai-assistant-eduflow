@@ -83,17 +83,17 @@ class TestClassifierLLMFallback:
         assert result == MessageType.ESCALATE
 
     @pytest.mark.asyncio
-    async def test_llm_returns_typical_maps_to_course(
+    async def test_llm_returns_typical_maps_to_escalate(
         self, classifier: ClassifierAgent, mock_llm: AsyncMock
     ) -> None:
         mock_llm.generate.return_value = "typical"
         result = await classifier.classify("Расскажите подробнее о курсе по аналитике")
-        assert result == MessageType.COURSE
+        assert result == MessageType.ESCALATE
 
     @pytest.mark.asyncio
-    async def test_llm_returns_unknown_maps_to_course(
+    async def test_llm_returns_unknown_maps_to_escalate(
         self, classifier: ClassifierAgent, mock_llm: AsyncMock
     ) -> None:
         mock_llm.generate.return_value = "something_unexpected"
         result = await classifier.classify("Непонятное сообщение среднего размера")
-        assert result == MessageType.COURSE
+        assert result == MessageType.ESCALATE

@@ -75,6 +75,23 @@ async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
 
     logger.info("app_startup_begin")
 
+    # Warn about missing security tokens
+    if not settings.wappi_webhook_token:
+        logger.warning(
+            "wappi_webhook_token_not_set",
+            msg="Webhook auth disabled — set WAPPI_WEBHOOK_TOKEN in production",
+        )
+    if not settings.bitrix24_webhook_token:
+        logger.warning(
+            "bitrix24_webhook_token_not_set",
+            msg="Webhook auth disabled — set BITRIX24_WEBHOOK_TOKEN in production",
+        )
+    if not settings.admin_api_key:
+        logger.warning(
+            "admin_api_key_not_set",
+            msg="Admin endpoint auth disabled — set ADMIN_API_KEY in production",
+        )
+
     try:
         # Initialize database
         logger.info("initializing_database", dsn=settings.postgres_dsn.split("@")[-1])
@@ -168,12 +185,16 @@ async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
 # FastAPI Application
 # ============================================================================
 
+_is_production = settings.log_format == "json"
+
 app = FastAPI(
     title="EduFlow AI Assistant",
     description="AI-powered learning assistant for course management",
     version="1.0.0",
     lifespan=lifespan,
     debug=False,
+    docs_url="/docs" if not _is_production else None,
+    redoc_url="/redoc" if not _is_production else None,
 )
 
 # ============================================================================

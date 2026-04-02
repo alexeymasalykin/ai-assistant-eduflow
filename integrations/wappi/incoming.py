@@ -59,12 +59,22 @@ class WappiIncomingHandler:
 
         return True
 
+    _DEDUP_MAX_SIZE = 10000
+
+    def _cleanup_dedup_cache(self) -> None:
+        """Evict oldest half of entries when cache exceeds max size."""
+        if len(self._dedup_cache) > self._DEDUP_MAX_SIZE:
+            keys_to_remove = list(self._dedup_cache.keys())[: self._DEDUP_MAX_SIZE // 2]
+            for k in keys_to_remove:
+                del self._dedup_cache[k]
+
     def _add_to_dedup_cache(self, message_id: str) -> None:
         """Add message_id to deduplication cache.
 
         Args:
             message_id: Unique message identifier to cache.
         """
+        self._cleanup_dedup_cache()
         self._dedup_cache[message_id] = datetime.now()
 
     async def _find_or_create_user_mapping(

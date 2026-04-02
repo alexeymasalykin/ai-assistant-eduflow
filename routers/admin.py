@@ -7,10 +7,13 @@ Endpoints:
 
 from __future__ import annotations
 
+import hmac
 from typing import TYPE_CHECKING, Any
 
 import structlog
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
+
+from config import settings
 
 if TYPE_CHECKING:
     from integrations.database import Database
@@ -18,6 +21,30 @@ if TYPE_CHECKING:
 logger = structlog.get_logger()
 
 router = APIRouter(tags=["admin"])
+
+
+# ============================================================================
+# Admin API key authentication
+# ============================================================================
+
+
+async def verify_admin_api_key(
+    x_admin_key: str = Header(default=""),
+) -> None:
+    """Validate admin API key using timing-safe comparison.
+
+    If ADMIN_API_KEY is not configured (empty), skip validation (dev mode).
+
+    Raises:
+        HTTPException: 403 if key is configured but doesn't match.
+    """
+    expected = settings.admin_api_key
+    if not expected:
+        return
+
+    if not x_admin_key or not hmac.compare_digest(x_admin_key, expected):
+        logger.warning("admin_api_key_auth_failed")
+        raise HTTPException(status_code=403, detail="Forbidden")
 
 
 @router.get("/health")
@@ -67,7 +94,7 @@ async def health_check(request: Request) -> dict[str, Any]:
         }
 
 
-@router.get("/stats")
+@router.get("/stats", dependencies=[Depends(verify_admin_api_key)])
 async def get_stats(request: Request) -> dict[str, Any]:
     """Get application statistics.
 

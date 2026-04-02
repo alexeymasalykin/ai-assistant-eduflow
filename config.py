@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     # Security
     wappi_webhook_token: str = ""
     bitrix24_webhook_token: str = ""
+    admin_api_key: str = ""
     rate_limit_per_minute: int = 100
 
     # Logging

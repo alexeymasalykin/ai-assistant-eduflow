@@ -62,5 +62,5 @@ class ClassifierAgent:
         logger.info("classified", type=category, method="llm")
         if category in VALID_LLM_RESPONSES:
             return MessageType(category)
-        logger.warning("llm_unexpected_category", category=category, fallback="course")
-        return MessageType.COURSE
+        logger.warning("llm_unexpected_category", category=category, fallback="escalate")
+        return MessageType.ESCALATE

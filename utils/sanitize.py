@@ -13,19 +13,37 @@ _SQL_INJECTION_RE = re.compile(
 _NULL_BYTE_RE = re.compile(r"\x00")
 
 
+_PROMPT_LEAK_PATTERNS = [
+    re.compile(
+        r"(?i)^(my instructions|my prompt|i was told|i am instructed|system prompt)"
+    ),
+    re.compile(
+        r"(?i)(here are my instructions|my rules are|i must follow)"
+    ),
+]
+
+
 def sanitize_llm_output(text: str) -> str:
     """Sanitize LLM response before sending to user.
 
     Removes potential system prompt leaks and instruction artifacts.
+    Truncates to MAX_MESSAGE_LENGTH.
     """
     if not text:
         return ""
     lines = text.strip().splitlines()
-    filtered = [
-        line for line in lines
-        if not line.strip().lower().startswith(("system:", "assistant:", "security:"))
-    ]
-    return "\n".join(filtered).strip()
+    filtered: list[str] = []
+    for line in lines:
+        stripped = line.strip().lower()
+        if stripped.startswith(("system:", "assistant:", "security:")):
+            continue
+        if any(p.search(line) for p in _PROMPT_LEAK_PATTERNS):
+            continue
+        filtered.append(line)
+    result = "\n".join(filtered).strip()
+    if len(result) > MAX_MESSAGE_LENGTH:
+        result = result[:MAX_MESSAGE_LENGTH]
+    return result
 
 
 def sanitize_input(text: str) -> str:

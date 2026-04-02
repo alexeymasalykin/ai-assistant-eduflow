@@ -43,7 +43,7 @@ class VectorDB:
             chunks = self._split_into_chunks(content)
 
             for i, chunk in enumerate(chunks):
-                doc_id = hashlib.md5(f"{md_file.name}:{i}".encode()).hexdigest()
+                doc_id = hashlib.md5(f"{md_file.name}:{i}".encode(), usedforsecurity=False).hexdigest()
                 documents.append(chunk)
                 ids.append(doc_id)
                 metadatas.append({"source": md_file.name, "chunk_index": str(i)})

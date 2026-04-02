@@ -25,7 +25,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field, ConfigDict
 
 from config import settings
-from rate_limiter import limiter
+from rate_limiter import limiter  # noqa: F401 — used via app.state
 
 if TYPE_CHECKING:
     from integrations.database import Database
@@ -42,9 +42,20 @@ router = APIRouter(prefix="/webhook", tags=["wappi"])
 
 _chat_locks: dict[str, asyncio.Lock] = {}
 
+_MAX_CACHE_SIZE = 5000
+
+
+def _cleanup_if_needed(cache: dict, max_size: int = _MAX_CACHE_SIZE) -> None:  # type: ignore[type-arg]
+    """Evict oldest half of entries when cache exceeds max_size."""
+    if len(cache) > max_size:
+        keys_to_remove = list(cache.keys())[: max_size // 2]
+        for k in keys_to_remove:
+            del cache[k]
+
 
 def get_chat_lock(chat_id: str) -> asyncio.Lock:
     """Get or create an asyncio.Lock for the given chat_id."""
+    _cleanup_if_needed(_chat_locks)
     if chat_id not in _chat_locks:
         _chat_locks[chat_id] = asyncio.Lock()
     return _chat_locks[chat_id]
@@ -66,6 +77,7 @@ def check_chat_rate_limit(chat_id: str) -> bool:
     Returns True if allowed, False if rate-limited.
     Cleans up expired timestamps on each call.
     """
+    _cleanup_if_needed(_chat_timestamps)
     now = time.monotonic()
     timestamps = _chat_timestamps[chat_id]
 
@@ -78,6 +90,32 @@ def check_chat_rate_limit(chat_id: str) -> bool:
         return False
 
     _chat_timestamps[chat_id].append(now)
+    return True
+
+
+# ============================================================================
+# Per-chat daily LLM budget (50 calls / 24h rolling window)
+# ============================================================================
+
+_DAILY_LLM_LIMIT = 50
+_DAILY_LLM_WINDOW = 86400.0  # 24 hours in seconds
+_daily_llm_calls: dict[str, list[float]] = defaultdict(list)
+
+
+def check_daily_llm_limit(chat_id: str) -> bool:
+    """Check if chat_id has exceeded daily LLM call budget.
+
+    Uses a rolling 24h window. Returns True if allowed, False if exceeded.
+    """
+    _cleanup_if_needed(_daily_llm_calls, max_size=10000)
+    now = time.monotonic()
+    calls = _daily_llm_calls[chat_id]
+    _daily_llm_calls[chat_id] = [t for t in calls if now - t < _DAILY_LLM_WINDOW]
+
+    if len(_daily_llm_calls[chat_id]) >= _DAILY_LLM_LIMIT:
+        return False
+
+    _daily_llm_calls[chat_id].append(now)
     return True
 
 
@@ -146,7 +184,23 @@ async def wappi_webhook(
             "per_chat_rate_limit_exceeded",
             chat_id=payload.chat_id,
         )
-        raise HTTPException(status_code=429, detail="Too many messages from this chat")
+        raise HTTPException(
+            status_code=429,
+            detail="Too many messages from this chat",
+            headers={"Retry-After": "60"},
+        )
+
+    # Per-chat daily LLM budget
+    if not check_daily_llm_limit(payload.chat_id):
+        logger.warning(
+            "daily_llm_limit_exceeded",
+            chat_id=payload.chat_id,
+        )
+        raise HTTPException(
+            status_code=429,
+            detail="Daily message limit exceeded",
+            headers={"Retry-After": "3600"},
+        )
 
     # Get dependencies from app state
     db = request.app.state.db
@@ -205,7 +259,7 @@ async def wappi_webhook(
 
     except (KeyError, ValueError) as e:
         logger.error("wappi_webhook_validation_error", error=str(e))
-        raise HTTPException(status_code=400, detail=f"Invalid payload: {str(e)}")
+        raise HTTPException(status_code=400, detail="Invalid webhook payload")
 
     except Exception as e:
         logger.error("wappi_webhook_unexpected_error", error=str(e))
