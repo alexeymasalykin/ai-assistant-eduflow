@@ -1,0 +1,83 @@
+name: Docker Build
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Build Docker image
+        run: |
+          docker build -t eduflow:test .
+
+      - name: Create .env file for docker-compose
+        run: |
+          cat > .env.test <<EOF
+          POSTGRES_PASSWORD=postgres
+          LLM_PROVIDER=openai
+          OPENAI_API_KEY=test-key
+          LOG_LEVEL=INFO
+          LOG_FORMAT=json
+          RATE_LIMIT_PER_MINUTE=100
+          EOF
+
+      - name: Start services with docker-compose
+        run: |
+          docker-compose -f docker-compose.prod.yml up -d --build
+        env:
+          COMPOSE_FILE: docker-compose.prod.yml
+
+      - name: Wait for services to be healthy
+        run: |
+          echo "Waiting for services to start..."
+          sleep 15
+
+          # Check if webhook service is running
+          max_attempts=30
+          attempt=1
+          while [ $attempt -le $max_attempts ]; do
+            if docker exec eduflow_webhook curl -f http://localhost:8000/health 2>/dev/null; then
+              echo "Health check passed!"
+              break
+            fi
+            echo "Health check attempt $attempt/$max_attempts..."
+            sleep 2
+            attempt=$((attempt+1))
+          done
+
+          if [ $attempt -gt $max_attempts ]; then
+            echo "Services failed to become healthy"
+            docker logs eduflow_webhook
+            exit 1
+          fi
+
+      - name: Test API endpoints
+        run: |
+          echo "Testing API endpoints..."
+          docker exec eduflow_webhook curl -f http://localhost:8000/health
+          docker exec eduflow_webhook curl -f http://localhost:8000/docs || true
+
+      - name: Collect Docker logs on failure
+        if: failure()
+        run: |
+          echo "=== Webhook logs ==="
+          docker logs eduflow_webhook || true
+          echo "=== Database logs ==="
+          docker logs eduflow_db || true
+          echo "=== Nginx logs ==="
+          docker logs eduflow_nginx || true
+
+      - name: Stop services
+        if: always()
+        run: |
+          docker-compose -f docker-compose.prod.yml down -v
