@@ -30,6 +30,7 @@ def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line("markers", "integration: mark test as integration test")
     config.addinivalue_line("markers", "database: mark test as database test")
     config.addinivalue_line("markers", "slow: mark test as slow (deselect with '-m \"not slow\"')")
+    config.addinivalue_line("markers", "e2e: mark test as end-to-end test")
 
 
 @pytest.fixture(scope="session")
