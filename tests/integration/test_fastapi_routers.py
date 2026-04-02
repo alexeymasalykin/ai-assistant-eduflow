@@ -13,18 +13,17 @@ Tests cover:
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
 from typing import Any
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
-from pydantic import ValidationError
 
 import app as app_module
-from integrations.database import Database
-from integrations.bitrix_client import BitrixClient
-from integrations.wappi import WappiIncomingHandler, WappiOutgoingHandler
 from agents.orchestrator import Orchestrator
+from integrations.bitrix_client import BitrixClient
+from integrations.database import Database
+from integrations.wappi import WappiIncomingHandler, WappiOutgoingHandler
 
 
 @pytest.fixture
@@ -118,7 +117,7 @@ def valid_bitrix_payload() -> dict[str, Any]:
 @pytest.fixture(autouse=True)
 def _clear_chat_rate_limits() -> None:
     """Clear per-chat rate limit state between tests."""
-    from routers.wappi import _chat_timestamps, _chat_locks
+    from routers.wappi import _chat_locks, _chat_timestamps
     _chat_timestamps.clear()
     _chat_locks.clear()
 

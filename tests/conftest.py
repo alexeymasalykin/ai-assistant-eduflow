@@ -10,10 +10,12 @@ Configures:
 from __future__ import annotations
 
 import os
-from typing import Generator
+from typing import TYPE_CHECKING
 
 import pytest
 
+if TYPE_CHECKING:
+    from collections.abc import Generator
 
 # Pytest plugins configuration
 pytest_plugins = [

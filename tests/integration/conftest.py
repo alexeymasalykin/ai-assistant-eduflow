@@ -18,12 +18,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app as app_module
-from integrations.database import Database
+from agents.orchestrator import Orchestrator
 from integrations.bitrix_client import BitrixClient
+from integrations.database import Database
 from integrations.llm_client import LLMClient
 from integrations.vector_db import VectorDB
 from integrations.wappi import WappiIncomingHandler, WappiOutgoingHandler
-from agents.orchestrator import Orchestrator
 
 
 @pytest.fixture

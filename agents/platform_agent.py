@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import structlog
 
 from agents.types import AgentResponse, MessageType
-from integrations.llm_client import LLMClient
-from integrations.vector_db import VectorDB
 from prompts.platform_agent import PLATFORM_AGENT_SYSTEM_PROMPT
 from utils.sanitize import sanitize_llm_output
+
+if TYPE_CHECKING:
+    from integrations.llm_client import LLMClient
+    from integrations.vector_db import VectorDB
 
 logger = structlog.get_logger()
 

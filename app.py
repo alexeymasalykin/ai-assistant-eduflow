@@ -11,7 +11,6 @@ App initialization:
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any
 
 import httpx
 import structlog
@@ -21,19 +20,15 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
-from rate_limiter import limiter
-
+from agents.orchestrator import Orchestrator
 from config import settings
-from integrations.database import Database
 from integrations.bitrix_client import BitrixClient
+from integrations.database import Database
 from integrations.llm_client import LLMClient, create_llm_client
 from integrations.vector_db import VectorDB
 from integrations.wappi import WappiIncomingHandler, WappiOutgoingHandler
-from agents.orchestrator import Orchestrator
-from routers import wappi, bitrix, admin
-
-if TYPE_CHECKING:
-    pass
+from rate_limiter import limiter
+from routers import admin, bitrix, wappi
 
 logger = structlog.get_logger()
 

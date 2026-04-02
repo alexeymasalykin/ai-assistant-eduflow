@@ -18,19 +18,14 @@ import asyncio
 import hmac
 import time
 from collections import defaultdict
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import structlog
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from config import settings
 from rate_limiter import limiter  # noqa: F401 — used via app.state
-
-if TYPE_CHECKING:
-    from integrations.database import Database
-    from integrations.wappi import WappiIncomingHandler, WappiOutgoingHandler
-    from agents.orchestrator import Orchestrator
 
 logger = structlog.get_logger()
 
@@ -259,7 +254,7 @@ async def wappi_webhook(
 
     except (KeyError, ValueError) as e:
         logger.error("wappi_webhook_validation_error", error=str(e))
-        raise HTTPException(status_code=400, detail="Invalid webhook payload")
+        raise HTTPException(status_code=400, detail="Invalid webhook payload") from None
 
     except Exception as e:
         logger.error("wappi_webhook_unexpected_error", error=str(e))

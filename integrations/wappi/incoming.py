@@ -7,8 +7,9 @@ import structlog
 
 if TYPE_CHECKING:
     import asyncpg
-    from integrations.database import Database
+
     from integrations.bitrix_client import BitrixClient
+    from integrations.database import Database
 
 logger = structlog.get_logger()
 
@@ -154,7 +155,7 @@ class WappiIncomingHandler:
         chat_id: str = payload["chat_id"]
         phone: str = payload["from"]
         body: str = payload["body"]
-        timestamp: int = payload["timestamp"]
+        payload["timestamp"]
         message_type: str = payload["message_type"]
 
         # Check deduplication

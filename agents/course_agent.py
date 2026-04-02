@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import structlog
 
 from agents.types import AgentResponse, MessageType
-from integrations.bitrix_client import BitrixClient
-from integrations.llm_client import LLMClient
 from prompts.course_agent import COURSE_AGENT_SYSTEM_PROMPT
 from utils.sanitize import sanitize_llm_output
+
+if TYPE_CHECKING:
+    from integrations.bitrix_client import BitrixClient
+    from integrations.llm_client import LLMClient
 
 logger = structlog.get_logger()
 

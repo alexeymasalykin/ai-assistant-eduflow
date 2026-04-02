@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from agents.typical_agent import TypicalAgent
 from agents.types import AgentResponse, MessageType
+from agents.typical_agent import TypicalAgent
 
 
 @pytest.fixture

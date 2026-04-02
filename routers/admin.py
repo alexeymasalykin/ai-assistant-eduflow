@@ -8,15 +8,12 @@ Endpoints:
 from __future__ import annotations
 
 import hmac
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import structlog
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 
 from config import settings
-
-if TYPE_CHECKING:
-    from integrations.database import Database
 
 logger = structlog.get_logger()
 
@@ -115,7 +112,7 @@ async def get_stats(request: Request) -> dict[str, Any]:
     try:
         # Query message statistics from dialog_logs
         # Pool methods may be sync or async depending on implementation
-        if hasattr(db.pool.fetchval, '__call__'):
+        if callable(db.pool.fetchval):
             # Try async call first
             try:
                 total_messages = await db.pool.fetchval(
@@ -160,4 +157,4 @@ async def get_stats(request: Request) -> dict[str, Any]:
 
     except Exception as e:
         logger.error("stats_endpoint_error", error=str(e))
-        raise HTTPException(status_code=500, detail="Error retrieving statistics")
+        raise HTTPException(status_code=500, detail="Error retrieving statistics") from None

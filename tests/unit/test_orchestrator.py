@@ -266,7 +266,7 @@ class TestOrchestratorClassifyAsEscalate:
             orchestrator.classifier, "classify", return_value=MessageType.ESCALATE
         ):
             response = await orchestrator.process(
-                "Сложный юридический вопрос про контракт"
+                "Сложный вопрос про возврат оплаты за курс"
             )
 
             assert isinstance(response, AgentResponse)

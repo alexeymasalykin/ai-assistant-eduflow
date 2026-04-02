@@ -11,17 +11,13 @@ Handles:
 from __future__ import annotations
 
 import hmac
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import structlog
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel
 
 from config import settings
-from rate_limiter import limiter
-
-if TYPE_CHECKING:
-    from integrations.bitrix_client import BitrixClient
 
 logger = structlog.get_logger()
 

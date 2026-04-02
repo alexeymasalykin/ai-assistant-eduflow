@@ -1,16 +1,20 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import structlog
 
 from agents.classifier import ClassifierAgent
 from agents.course_agent import CourseAgent
 from agents.platform_agent import PlatformAgent
-from agents.typical_agent import TypicalAgent
 from agents.types import AgentResponse, MessageType
-from integrations.bitrix_client import BitrixClient
-from integrations.llm_client import LLMClient
-from integrations.vector_db import VectorDB
+from agents.typical_agent import TypicalAgent
 from utils.sanitize import sanitize_input
+
+if TYPE_CHECKING:
+    from integrations.bitrix_client import BitrixClient
+    from integrations.llm_client import LLMClient
+    from integrations.vector_db import VectorDB
 
 logger = structlog.get_logger()
 

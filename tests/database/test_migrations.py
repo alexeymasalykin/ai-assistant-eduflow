@@ -9,11 +9,6 @@ import importlib.util
 from pathlib import Path
 from typing import Any
 
-import pytest
-import sqlalchemy as sa
-from alembic.migration import MigrationContext
-from alembic.operations import Operations
-
 
 def get_migration_module() -> Any:
     """Load migration module dynamically."""
