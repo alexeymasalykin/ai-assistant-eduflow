@@ -2,7 +2,12 @@
 
 AI-ассистент для платформы онлайн-обучения EduFlow. Автоматически отвечает на вопросы студентов, предоставляет информацию о курсах, обрабатывает платежи, эскалирует сложные запросы к живым преподавателям.
 
-**Версия:** 1.0.0 | **Статус:** Production-Ready | **License:** MIT
+![Tests](https://github.com/alex2061/ai_assistant_eduflow/actions/workflows/test.yml/badge.svg)
+![Coverage](https://codecov.io/gh/alex2061/ai_assistant_eduflow/branch/main/graph/badge.svg)
+![Python](https://img.shields.io/badge/python-3.11%2B-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+
+**170 тестов** | **84% coverage** | **Production-Ready**
 
 ---
 
@@ -23,20 +28,21 @@ AI-ассистент для платформы онлайн-обучения Ed
 
 ## Архитектура
 
-```
-Входящее сообщение (Telegram / MAX Messenger)
-    |
-[Wappi Webhook] --> channel detection, validation, deduplication, user mapping
-    |
-[Orchestrator] --> FAQ short-answer check
-    |
-[ClassifierAgent] --> rule-based + LLM classification
-    |-- TypicalAgent      (~15%) --> greeting/thanks/confirmations
-    |-- CourseAgent       (~50%) --> course info + deal status from Bitrix24
-    |-- PlatformAgent     (~5%)  --> technical support (RAG knowledge base)
-    \-- ESCALATE          (~30%) --> complex queries --> live instructor
-    |
-[Response] --> via Wappi API --> user
+```mermaid
+flowchart TD
+    A["Входящее сообщение\n(Telegram / MAX Messenger)"] --> B["Wappi Webhook\nchannel detection, validation,\ndeduplication, user mapping"]
+    B --> C["Orchestrator\nFAQ short-answer check"]
+    C --> D["ClassifierAgent\nrule-based + LLM classification"]
+
+    D -->|"~15%"| E["TypicalAgent\ngreeting / thanks / confirmations"]
+    D -->|"~50%"| F["CourseAgent\ncourse info + deal status\nfrom Bitrix24"]
+    D -->|"~5%"| G["PlatformAgent\ntechnical support\nRAG knowledge base"]
+    D -->|"~30%"| H["ESCALATE\ncomplex queries\nlive instructor"]
+
+    E --> I["Response via Wappi API"]
+    F --> I
+    G --> I
+    H --> I
 ```
 
 ### Компоненты
@@ -192,12 +198,13 @@ POSTGRES_DSN=postgresql+asyncpg://...
 
 ## Тестирование
 
-146 тестов, 100% pass rate, TDD подход.
+170 тестов, 84% coverage, TDD подход.
 
 ```bash
 pytest tests/                          # все
 pytest tests/unit/ -v                  # unit
 pytest tests/integration/ -v           # integration
+pytest tests/e2e/ -v                   # e2e (full pipeline)
 pytest --cov=. --cov-report=term-missing  # coverage
 ```
 
@@ -243,7 +250,7 @@ ai_assistant_eduflow/
 │   └── admin.py
 ├── prompts/              # LLM prompts
 ├── utils/                # Sanitization, validation
-├── tests/                # 146 tests
+├── tests/                # 170 tests (unit + integration + e2e)
 ├── alembic/              # Database migrations
 ├── deployment/           # Docker, nginx, .env
 ├── app.py
