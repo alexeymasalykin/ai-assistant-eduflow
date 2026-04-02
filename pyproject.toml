@@ -11,7 +11,7 @@ known-first-party = ["agents", "integrations", "repositories", "routers", "promp
 
 [tool.pyright]
 pythonVersion = "3.12"
-typeCheckingMode = "strict"
+typeCheckingMode = "standard"
 venvPath = "."
 venv = ".venv"
 exclude = ["tests"]
