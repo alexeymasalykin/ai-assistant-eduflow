@@ -1,0 +1,101 @@
+"""Create initial schema for EduFlow AI Assistant.
+
+Revision ID: 001_create_initial_schema
+Revises:
+Create Date: 2026-04-02 12:00:00.000000
+
+This migration creates the initial database schema with three tables:
+- user_mappings: Maps Wappi chat IDs to users and Bitrix deals
+- dialog_logs: Logs all incoming/outgoing messages and agent interactions
+- analytics: Daily message and escalation statistics
+"""
+from __future__ import annotations
+
+from typing import Sequence, Union
+
+import sqlalchemy as sa
+from alembic import op
+
+# revision identifiers, used by Alembic.
+revision: str = "001_create_initial_schema"
+down_revision: Union[str, None] = None
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
+
+
+def upgrade() -> None:
+    """Create initial schema tables."""
+    # user_mappings table
+    op.create_table(
+        "user_mappings",
+        sa.Column("id", sa.Integer, primary_key=True),
+        sa.Column("wappi_chat_id", sa.String(255), unique=True, nullable=False),
+        sa.Column("user_phone", sa.String(20), nullable=True),
+        sa.Column("user_name", sa.String(255), nullable=True),
+        sa.Column("deal_id", sa.Integer, nullable=True),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
+    )
+
+    # Index on deal_id for filtering by deal
+    op.create_index("ix_user_mappings_deal_id", "user_mappings", ["deal_id"])
+
+    # dialog_logs table with foreign key to user_mappings
+    op.create_table(
+        "dialog_logs",
+        sa.Column("id", sa.Integer, primary_key=True),
+        sa.Column(
+            "user_id",
+            sa.Integer,
+            sa.ForeignKey("user_mappings.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.Column("message_type", sa.String(50), nullable=False),
+        sa.Column("incoming_text", sa.Text, nullable=True),
+        sa.Column("outgoing_text", sa.Text, nullable=True),
+        sa.Column("agent_used", sa.String(50), nullable=True),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
+    )
+
+    # Index on user_id for filtering logs by user
+    op.create_index("ix_dialog_logs_user_id", "dialog_logs", ["user_id"])
+
+    # analytics table for daily statistics
+    op.create_table(
+        "analytics",
+        sa.Column("id", sa.Integer, primary_key=True),
+        sa.Column("message_date", sa.Date, nullable=False, unique=True),
+        sa.Column("message_count", sa.Integer, default=0, nullable=False),
+        sa.Column("escalation_count", sa.Integer, default=0, nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
+    )
+
+    # Index on message_date (unique constraint already exists)
+    op.create_index("ix_analytics_message_date", "analytics", ["message_date"], unique=True)
+
+
+def downgrade() -> None:
+    """Drop all tables created in upgrade."""
+    op.drop_table("analytics")
+    op.drop_table("dialog_logs")
+    op.drop_table("user_mappings")
