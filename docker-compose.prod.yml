@@ -1,0 +1,97 @@
+services:
+  # PostgreSQL database
+  db:
+    image: postgres:15-alpine
+    container_name: eduflow_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ai_assistant_eduflow
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - eduflow_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # FastAPI webhook service
+  webhook:
+    build: .
+    container_name: eduflow_webhook
+    environment:
+      # Database
+      POSTGRES_DSN: postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/ai_assistant_eduflow
+
+      # LLM Configuration
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      YANDEX_API_KEY: ${YANDEX_API_KEY}
+      YANDEX_FOLDER_ID: ${YANDEX_FOLDER_ID}
+
+      # Bitrix24 Integration
+      BITRIX24_WEBHOOK_URL: ${BITRIX24_WEBHOOK_URL}
+      BITRIX24_WEBHOOK_TOKEN: ${BITRIX24_WEBHOOK_TOKEN}
+
+      # Wappi Integration
+      WAPPI_API_TOKEN: ${WAPPI_API_TOKEN}
+      WAPPI_PROFILE_ID: ${WAPPI_PROFILE_ID}
+      WAPPI_WEBHOOK_TOKEN: ${WAPPI_WEBHOOK_TOKEN}
+
+      # Embeddings
+      OPENAI_EMBEDDINGS_API_KEY: ${OPENAI_EMBEDDINGS_API_KEY}
+
+      # Application
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-100}
+
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - eduflow_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      retries: 3
+
+  # Nginx reverse proxy
+  nginx:
+    image: nginx:alpine
+    container_name: eduflow_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deployment/nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./data/certbot/conf:/etc/letsencrypt:ro
+      - ./data/certbot/www:/var/www/certbot:ro
+    depends_on:
+      - webhook
+    networks:
+      - eduflow_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+# Persistent volumes
+volumes:
+  postgres_data:
+    driver: local
+
+# Custom bridge network for service isolation
+networks:
+  eduflow_network:
+    driver: bridge

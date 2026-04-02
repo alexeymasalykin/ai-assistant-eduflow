@@ -1,0 +1,63 @@
+# Version control
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+.venv
+venv
+env
+ENV
+.pytest_cache
+.ruff_cache
+.coverage
+.coverage.*
+htmlcov/
+*.egg-info/
+dist/
+build/
+
+# Node modules
+node_modules
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Documentation and metadata
+docs/
+README.md
+CLAUDE.md
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+tests/
+pytest.ini
+
+# Development
+docker-compose.yml
+docker-compose.*.yml
+
+# Data directories (will be persisted via volumes)
+# data/ is excluded selectively to exclude logs/temp but keep chroma_db
+data/chroma_db/
+
+# Logs
+*.log
+logs/
