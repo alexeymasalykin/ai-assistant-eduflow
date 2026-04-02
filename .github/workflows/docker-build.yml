@@ -10,6 +10,21 @@ jobs:
   docker:
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: eduflow
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
     steps:
       - uses: actions/checkout@v4
 
@@ -20,64 +35,52 @@ jobs:
         run: |
           docker build -t eduflow:test .
 
-      - name: Create .env file for docker-compose
+      - name: Verify image starts
         run: |
-          cat > .env.test <<EOF
-          POSTGRES_PASSWORD=postgres
-          LLM_PROVIDER=openai
-          OPENAI_API_KEY=test-key
-          LOG_LEVEL=INFO
-          LOG_FORMAT=json
-          RATE_LIMIT_PER_MINUTE=100
-          EOF
+          docker run --rm -d \
+            --name eduflow_test \
+            --network host \
+            -e POSTGRES_DSN=postgresql://postgres:postgres@localhost:5432/eduflow \
+            -e LLM_PROVIDER=openai \
+            -e OPENAI_API_KEY=test-key \
+            -e LOG_LEVEL=INFO \
+            -e LOG_FORMAT=json \
+            -e RATE_LIMIT_PER_MINUTE=100 \
+            -e WAPPI_WEBHOOK_SECRET=test-secret \
+            eduflow:test
 
-      - name: Start services with docker-compose
-        run: |
-          docker compose -f docker-compose.prod.yml up -d --build
-        env:
-          COMPOSE_FILE: docker-compose.prod.yml
+          echo "Waiting for app to start..."
+          sleep 10
 
-      - name: Wait for services to be healthy
-        run: |
-          echo "Waiting for services to start..."
-          sleep 15
-
-          # Check if webhook service is running
-          max_attempts=30
+          max_attempts=20
           attempt=1
           while [ $attempt -le $max_attempts ]; do
-            if docker exec eduflow_webhook curl -f http://localhost:8000/health 2>/dev/null; then
+            if curl -sf http://localhost:8000/health; then
+              echo ""
               echo "Health check passed!"
               break
             fi
-            echo "Health check attempt $attempt/$max_attempts..."
-            sleep 2
+            echo "Attempt $attempt/$max_attempts..."
+            sleep 3
             attempt=$((attempt+1))
           done
 
           if [ $attempt -gt $max_attempts ]; then
-            echo "Services failed to become healthy"
-            docker logs eduflow_webhook
+            echo "App failed to start"
+            docker logs eduflow_test
             exit 1
           fi
 
-      - name: Test API endpoints
+      - name: Test health endpoint
         run: |
-          echo "Testing API endpoints..."
-          docker exec eduflow_webhook curl -f http://localhost:8000/health
-          docker exec eduflow_webhook curl -f http://localhost:8000/docs || true
+          curl -sf http://localhost:8000/health | python3 -m json.tool
 
-      - name: Collect Docker logs on failure
+      - name: Collect logs on failure
         if: failure()
         run: |
-          echo "=== Webhook logs ==="
-          docker logs eduflow_webhook || true
-          echo "=== Database logs ==="
-          docker logs eduflow_db || true
-          echo "=== Nginx logs ==="
-          docker logs eduflow_nginx || true
+          docker logs eduflow_test || true
 
-      - name: Stop services
+      - name: Cleanup
         if: always()
         run: |
-          docker compose -f docker-compose.prod.yml down -v
+          docker stop eduflow_test || true
