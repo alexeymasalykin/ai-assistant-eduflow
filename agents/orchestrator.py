@@ -143,8 +143,7 @@ class Orchestrator:
     def _is_typical_pattern(message: str) -> bool:
         """Check if message matches any typical patterns (greeting/thanks/confirmation).
 
-        This duplicates logic from TypicalAgent but is needed here to decide
-        whether to skip classification or not.
+        Uses canonical patterns from ClassifierAgent.
 
         Args:
             message: Stripped message text
@@ -152,26 +151,14 @@ class Orchestrator:
         Returns:
             True if message matches any typical pattern
         """
-        import re
-
-        greeting_patterns = re.compile(
-            r"^(привет|здравствуй|добрый\s+(день|вечер|утро)|hi|hello|хай)\s*[!.]?$",
-            re.IGNORECASE,
-        )
-        thanks_patterns = re.compile(
-            r"^(спасибо|благодарю|спс|thanks|thank you)\s*[!.]?$",
-            re.IGNORECASE,
-        )
-        confirmation_patterns = re.compile(
-            r"^(ок|ok|хорошо|понял|принял|ладно|ясно|понятно|да|ага|угу)\s*[!.]?$",
-            re.IGNORECASE,
+        from agents.classifier import (
+            CONFIRMATION_PATTERNS,
+            GREETING_PATTERNS,
+            THANKS_PATTERNS,
         )
 
-        if greeting_patterns.match(message):
+        if GREETING_PATTERNS.match(message):
             return True
-        if thanks_patterns.match(message):
+        if THANKS_PATTERNS.match(message):
             return True
-        if confirmation_patterns.match(message):
-            return True
-
-        return False
+        return bool(CONFIRMATION_PATTERNS.match(message))

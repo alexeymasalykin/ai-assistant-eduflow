@@ -1,6 +1,6 @@
 # Multi-stage build: builder stage + runtime stage
 # Builder stage: compile dependencies, minimal intermediate layer
-FROM python:3.11-slim as builder
+FROM python:3.12-slim as builder
 
 WORKDIR /app
 
@@ -10,7 +10,7 @@ RUN pip install --no-cache-dir --user -r requirements.txt
 
 
 # Runtime stage: minimal production image
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 

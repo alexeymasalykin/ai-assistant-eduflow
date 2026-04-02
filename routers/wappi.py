@@ -2,22 +2,30 @@
 
 Handles:
 1. Message validation (Pydantic)
-2. HMAC token validation
-3. Deduplication
-4. User mapping (find or create)
-5. Orchestration (route to appropriate agent)
-6. Response sending
+2. HMAC token validation (timing-safe)
+3. Per-IP rate limiting (slowapi, 100/min)
+4. Per-chat rate limiting (10 req/min)
+5. Per-chat async locking (prevent race conditions)
+6. Deduplication
+7. User mapping (find or create)
+8. Orchestration (route to appropriate agent)
+9. Response sending
 """
 
 from __future__ import annotations
 
+import asyncio
 import hmac
-import hashlib
-from typing import TYPE_CHECKING, Any, Annotated
+import time
+from collections import defaultdict
+from typing import TYPE_CHECKING, Any
 
 import structlog
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field, ConfigDict
+
+from config import settings
+from rate_limiter import limiter
 
 if TYPE_CHECKING:
     from integrations.database import Database
@@ -28,6 +36,77 @@ logger = structlog.get_logger()
 
 router = APIRouter(prefix="/webhook", tags=["wappi"])
 
+# ============================================================================
+# Per-chat async locks (prevent race conditions on same chat)
+# ============================================================================
+
+_chat_locks: dict[str, asyncio.Lock] = {}
+
+
+def get_chat_lock(chat_id: str) -> asyncio.Lock:
+    """Get or create an asyncio.Lock for the given chat_id."""
+    if chat_id not in _chat_locks:
+        _chat_locks[chat_id] = asyncio.Lock()
+    return _chat_locks[chat_id]
+
+
+# ============================================================================
+# Per-chat rate limiting (10 messages/minute per chat)
+# ============================================================================
+
+_CHAT_RATE_LIMIT = 10
+_CHAT_RATE_WINDOW = 60.0  # seconds
+
+_chat_timestamps: dict[str, list[float]] = defaultdict(list)
+
+
+def check_chat_rate_limit(chat_id: str) -> bool:
+    """Check if chat_id has exceeded per-chat rate limit.
+
+    Returns True if allowed, False if rate-limited.
+    Cleans up expired timestamps on each call.
+    """
+    now = time.monotonic()
+    timestamps = _chat_timestamps[chat_id]
+
+    # Remove expired timestamps
+    _chat_timestamps[chat_id] = [
+        ts for ts in timestamps if now - ts < _CHAT_RATE_WINDOW
+    ]
+
+    if len(_chat_timestamps[chat_id]) >= _CHAT_RATE_LIMIT:
+        return False
+
+    _chat_timestamps[chat_id].append(now)
+    return True
+
+
+# ============================================================================
+# Webhook token authentication (HMAC timing-safe)
+# ============================================================================
+
+
+async def verify_wappi_webhook_token(
+    request: Request,
+    x_webhook_token: str = Header(default=""),
+) -> None:
+    """Validate webhook token using timing-safe comparison.
+
+    If WAPPI_WEBHOOK_TOKEN is not configured (empty), skip validation
+    to allow dev/test environments without tokens.
+
+    Raises:
+        HTTPException: 403 if token is configured but doesn't match.
+    """
+    expected = settings.wappi_webhook_token
+    if not expected:
+        # Token not configured — skip auth (dev mode)
+        return
+
+    if not x_webhook_token or not hmac.compare_digest(x_webhook_token, expected):
+        logger.warning("wappi_webhook_auth_failed", path=request.url.path)
+        raise HTTPException(status_code=403, detail="Forbidden")
+
 
 class WappiWebhookPayload(BaseModel):
     """Wappi webhook message payload."""
@@ -35,14 +114,14 @@ class WappiWebhookPayload(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     message_type: str
-    from_number: Annotated[str, Field(alias="from")]
+    from_number: str = Field(alias="from")
     body: str
     message_id: str
     timestamp: int
     chat_id: str
 
 
-@router.post("/wappi")
+@router.post("/wappi", dependencies=[Depends(verify_wappi_webhook_token)])
 async def wappi_webhook(
     request: Request,
     payload: WappiWebhookPayload,
@@ -50,32 +129,31 @@ async def wappi_webhook(
     """Process incoming Wappi webhook (Telegram/WhatsApp).
 
     Flow:
-    1. Validate token (optional HMAC)
-    2. Parse payload with Pydantic
-    3. Process with WappiIncomingHandler (dedup, user mapping)
-    4. If duplicate, return 200 silently
-    5. Route to Orchestrator
-    6. Send response via WappiOutgoingHandler if should_send=True
-    7. Return 200 OK
-
-    Args:
-        request: FastAPI request for header access
-        payload: Validated Wappi webhook payload
-
-    Returns:
-        JSON response with status
-
-    Raises:
-        HTTPException: On validation error (400)
+    1. Validate token (HMAC, via dependency)
+    2. Per-IP rate limit (slowapi decorator, 100/min)
+    3. Per-chat rate limit (10 req/min)
+    4. Parse payload with Pydantic
+    5. Acquire per-chat lock
+    6. Process with WappiIncomingHandler (dedup, user mapping)
+    7. If duplicate, return 200 silently
+    8. Route to Orchestrator
+    9. Send response via WappiOutgoingHandler if should_send=True
+    10. Return 200 OK
     """
+    # Per-chat rate limit
+    if not check_chat_rate_limit(payload.chat_id):
+        logger.warning(
+            "per_chat_rate_limit_exceeded",
+            chat_id=payload.chat_id,
+        )
+        raise HTTPException(status_code=429, detail="Too many messages from this chat")
+
     # Get dependencies from app state
     db = request.app.state.db
     wappi_incoming = request.app.state.wappi_incoming
     wappi_outgoing = request.app.state.wappi_outgoing
     orchestrator = request.app.state.orchestrator
 
-    # Dependencies are injected from app context
-    # If None, this is a test or incomplete setup
     if not all([db, wappi_incoming, wappi_outgoing, orchestrator]):
         logger.warning("wappi_webhook_missing_dependencies")
         raise HTTPException(status_code=503, detail="Service unavailable")
@@ -91,31 +169,39 @@ async def wappi_webhook(
     }
 
     try:
-        # Process incoming message (dedup, user mapping)
-        result = await wappi_incoming.process_message(payload_dict)
+        # Acquire per-chat lock to prevent race conditions
+        async with get_chat_lock(payload.chat_id):
+            # Process incoming message (dedup, user mapping)
+            result = await wappi_incoming.process_message(payload_dict)
 
-        # If duplicate, return 200 silently (webhook acknowledged)
-        if result is None:
-            logger.info("wappi_webhook_duplicate_skipped", message_id=payload.message_id)
-            return {"status": "ok"}
+            # If duplicate, return 200 silently (webhook acknowledged)
+            if result is None:
+                logger.info(
+                    "wappi_webhook_duplicate_skipped",
+                    message_id=payload.message_id,
+                )
+                return {"status": "ok"}
 
-        chat_id, phone = result
+            chat_id, phone = result
 
-        # Route to orchestrator
-        logger.info("wappi_webhook_routing_to_orchestrator", chat_id=chat_id)
-        agent_response = await orchestrator.process(payload.body)
+            # Route to orchestrator
+            logger.info("wappi_webhook_routing_to_orchestrator", chat_id=chat_id)
+            agent_response = await orchestrator.process(payload.body)
 
-        # Send response if should_send=True
-        if agent_response.should_send and agent_response.text:
-            logger.info("wappi_webhook_sending_response", chat_id=chat_id)
-            await wappi_outgoing.send_message(
-                chat_id=chat_id,
-                text=agent_response.text,
-            )
-        else:
-            logger.info("wappi_webhook_silent_response", chat_id=chat_id)
+            # Send response if should_send=True
+            if agent_response.should_send and agent_response.text:
+                logger.info("wappi_webhook_sending_response", chat_id=chat_id)
+                await wappi_outgoing.send_message(
+                    chat_id=chat_id,
+                    text=agent_response.text,
+                )
+            else:
+                logger.info("wappi_webhook_silent_response", chat_id=chat_id)
 
         return {"status": "ok"}
+
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions (rate limit, auth)
 
     except (KeyError, ValueError) as e:
         logger.error("wappi_webhook_validation_error", error=str(e))

@@ -1,18 +1,24 @@
 """Bitrix24 webhook router for deal updates.
 
 Handles:
-1. Deal update webhooks
-2. Metadata synchronization
-3. Course module assignments
+1. HMAC token validation (timing-safe)
+2. Per-IP rate limiting (slowapi, 100/min)
+3. Deal update webhooks
+4. Metadata synchronization
+5. Course module assignments
 """
 
 from __future__ import annotations
 
+import hmac
 from typing import TYPE_CHECKING, Any
 
 import structlog
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel
+
+from config import settings
+from rate_limiter import limiter
 
 if TYPE_CHECKING:
     from integrations.bitrix_client import BitrixClient
@@ -22,6 +28,33 @@ logger = structlog.get_logger()
 router = APIRouter(prefix="/webhook", tags=["bitrix"])
 
 
+# ============================================================================
+# Webhook token authentication (HMAC timing-safe)
+# ============================================================================
+
+
+async def verify_bitrix_webhook_token(
+    request: Request,
+    x_webhook_token: str = Header(default=""),
+) -> None:
+    """Validate webhook token using timing-safe comparison.
+
+    If BITRIX24_WEBHOOK_TOKEN is not configured (empty), skip validation
+    to allow dev/test environments without tokens.
+
+    Raises:
+        HTTPException: 403 if token is configured but doesn't match.
+    """
+    expected = settings.bitrix24_webhook_token
+    if not expected:
+        # Token not configured — skip auth (dev mode)
+        return
+
+    if not x_webhook_token or not hmac.compare_digest(x_webhook_token, expected):
+        logger.warning("bitrix_webhook_auth_failed", path=request.url.path)
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+
 class BitrixWebhookPayload(BaseModel):
     """Bitrix24 webhook payload."""
 
@@ -29,7 +62,7 @@ class BitrixWebhookPayload(BaseModel):
     data: dict[str, Any] = {}
 
 
-@router.post("/bitrix")
+@router.post("/bitrix", dependencies=[Depends(verify_bitrix_webhook_token)])
 async def bitrix_webhook(
     request: Request,
     payload: BitrixWebhookPayload,
@@ -37,20 +70,12 @@ async def bitrix_webhook(
     """Process incoming Bitrix24 webhook (deal updates).
 
     Flow:
-    1. Parse payload with Pydantic
-    2. Extract deal ID and update information
-    3. Process with BitrixClient (update metadata, sync)
-    4. Return 200 OK
-
-    Args:
-        request: FastAPI request for header access
-        payload: Validated Bitrix webhook payload
-
-    Returns:
-        JSON response with status
-
-    Raises:
-        HTTPException: On validation error (400)
+    1. Validate token (HMAC, via dependency)
+    2. Per-IP rate limit (slowapi decorator, 100/min)
+    3. Parse payload with Pydantic
+    4. Extract deal ID and update information
+    5. Process with BitrixClient (update metadata, sync)
+    6. Return 200 OK
     """
     bitrix_client = request.app.state.bitrix_client
 
@@ -72,16 +97,13 @@ async def bitrix_webhook(
                 return {"status": "ok"}  # ACK webhook
 
             # Process deal update (e.g., sync course module, update metadata)
-            # This is optional for MVP
             logger.info("bitrix_webhook_processed", deal_id=deal_id)
 
         elif payload.event == "ONCRMLEADUPDATE":
             logger.info("bitrix_webhook_lead_update", event=payload.event)
-            # Handle lead updates (optional)
 
         elif payload.event == "ONCRMDEALSTAGECHANGE":
             logger.info("bitrix_webhook_deal_stage_change", event=payload.event)
-            # Handle stage changes (optional)
 
         else:
             logger.info("bitrix_webhook_unknown_event", event=payload.event)

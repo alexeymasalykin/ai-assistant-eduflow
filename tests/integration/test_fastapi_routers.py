@@ -5,7 +5,10 @@ Tests cover:
 2. Bitrix webhook (deal updates)
 3. Admin endpoints (health, stats)
 4. Global error handling
-5. Rate limiting
+5. Rate limiting (per-IP via slowapi)
+6. Webhook token authentication (HMAC)
+7. Per-chat rate limiting (10 req/min)
+8. Per-chat async locking
 """
 
 from __future__ import annotations
@@ -112,6 +115,14 @@ def valid_bitrix_payload() -> dict[str, Any]:
     }
 
 
+@pytest.fixture(autouse=True)
+def _clear_chat_rate_limits() -> None:
+    """Clear per-chat rate limit state between tests."""
+    from routers.wappi import _chat_timestamps, _chat_locks
+    _chat_timestamps.clear()
+    _chat_locks.clear()
+
+
 class TestWappiWebhook:
     """Tests for POST /webhook/wappi endpoint."""
 
@@ -121,7 +132,6 @@ class TestWappiWebhook:
         mock_wappi_outgoing: AsyncMock
     ) -> None:
         """Test processing valid Wappi message returns 200."""
-        # Mock successful processing
         mock_wappi_incoming.process_message.return_value = ("1234567890", "+1234567890")
         mock_orchestrator.process.return_value = MagicMock(
             text="Hello! How can I help?",
@@ -139,12 +149,10 @@ class TestWappiWebhook:
         invalid_payload = {
             "message_type": "text",
             "body": "Missing required fields",
-            # Missing: from, message_id, timestamp, chat_id
         }
 
         response = client.post("/webhook/wappi", json=invalid_payload)
 
-        # Pydantic validation returns 422, but we accept that
         assert response.status_code in [400, 422]
         assert "error" in response.json() or "detail" in response.json()
 
@@ -153,12 +161,10 @@ class TestWappiWebhook:
         mock_wappi_incoming: AsyncMock
     ) -> None:
         """Test duplicate message_id is skipped (returns 200 silently)."""
-        # Mock deduplication: returns None for duplicate
         mock_wappi_incoming.process_message.return_value = None
 
         response = client.post("/webhook/wappi", json=valid_wappi_payload)
 
-        # Should still return 200 (webhook accepted but deduplicated)
         assert response.status_code == 200
         assert response.json()["status"] == "ok"
 
@@ -169,18 +175,16 @@ class TestWappiWebhook:
         payload = {
             "message_type": "text",
             "from": "+1234567890",
-            "body": "",  # Empty body
+            "body": "",
             "message_id": "msg_002",
             "timestamp": 1700000000,
             "chat_id": "1234567890",
         }
 
-        # Empty body will pass Pydantic but handler should handle it
         mock_wappi_incoming.process_message.side_effect = ValueError("Empty body")
 
         response = client.post("/webhook/wappi", json=payload)
 
-        # Should either reject or handle gracefully
         assert response.status_code in [200, 400, 422]
 
     def test_wappi_webhook_missing_message_id(self, client: TestClient) -> None:
@@ -189,14 +193,12 @@ class TestWappiWebhook:
             "message_type": "text",
             "from": "+1234567890",
             "body": "Test message",
-            # Missing message_id
             "timestamp": 1700000000,
             "chat_id": "1234567890",
         }
 
         response = client.post("/webhook/wappi", json=payload)
 
-        # Pydantic returns 422 for missing required field
         assert response.status_code in [400, 422]
 
 
@@ -221,7 +223,6 @@ class TestBitrixWebhook:
 
         response = client.post("/webhook/bitrix", json=payload)
 
-        # Should still return 200 for webhook ACK
         assert response.status_code == 200
 
 
@@ -232,7 +233,6 @@ class TestAdminEndpoints:
         self, client: TestClient, mock_db: AsyncMock
     ) -> None:
         """Test GET /health returns 200 with status."""
-        # Mock database connection check
         mock_db.pool = MagicMock()
 
         response = client.get("/health")
@@ -246,7 +246,6 @@ class TestAdminEndpoints:
         self, client: TestClient, mock_db: AsyncMock
     ) -> None:
         """Test GET /stats returns message counts."""
-        # Mock database stats queries
         async def mock_fetchval(query: str) -> int:  # type: ignore[no-untyped-def]
             return 42
 
@@ -267,7 +266,6 @@ class TestErrorHandling:
         mock_orchestrator: AsyncMock
     ) -> None:
         """Test global exception handler doesn't leak stack traces."""
-        # Mock orchestrator raising an exception
         mock_orchestrator.process.side_effect = RuntimeError("Unexpected error")
         mock_wappi_incoming.process_message.return_value = ("chat_id", "+phone")
 
@@ -283,11 +281,8 @@ class TestErrorHandling:
             },
         )
 
-        # Exception is caught and returns 200 with "ok" status (webhook ACK)
-        # Stack trace is NOT leaked in response
         assert response.status_code in [200, 500]
         data = response.json()
-        # Most important: no stack trace leaked
         assert "traceback" not in data
         assert "stack" not in data
 
@@ -295,12 +290,10 @@ class TestErrorHandling:
         """Test Pydantic validation error returns 422."""
         invalid_payload = {
             "message_type": "text",
-            # Missing all required fields
         }
 
         response = client.post("/webhook/wappi", json=invalid_payload)
 
-        # Pydantic returns 422 for validation errors
         assert response.status_code in [400, 422]
         data = response.json()
         assert "error" in data or "detail" in data
@@ -327,11 +320,8 @@ class TestRateLimiting:
         mock_orchestrator.process.return_value = MagicMock(text="Hi", should_send=True)
         mock_wappi_outgoing.send_message.return_value = True
 
-        # Make requests - we won't hit the actual limit in tests
-        # but we verify the mechanism exists in app.py
         response = client.post("/webhook/wappi", json=payload)
 
-        # First request should succeed
         assert response.status_code in [200, 429]
 
     def test_rate_limit_header_present(
@@ -354,9 +344,240 @@ class TestRateLimiting:
 
         response = client.post("/webhook/wappi", json=payload)
 
-        # Verify limiter is configured in app
         assert hasattr(app_module.app.state, "limiter")
         assert response.status_code in [200, 429]
+
+
+class TestWebhookTokenAuth:
+    """Tests for HMAC webhook token authentication."""
+
+    def test_wappi_webhook_auth_failure_with_wrong_token(
+        self, client: TestClient, valid_wappi_payload: dict[str, Any],
+    ) -> None:
+        """Test wappi webhook rejects invalid token when configured."""
+        with patch("routers.wappi.settings") as mock_settings:
+            mock_settings.wappi_webhook_token = "correct-secret-token"
+
+            response = client.post(
+                "/webhook/wappi",
+                json=valid_wappi_payload,
+                headers={"X-Webhook-Token": "wrong-token"},
+            )
+
+            assert response.status_code == 403
+            assert response.json()["detail"] == "Forbidden"
+
+    def test_wappi_webhook_auth_failure_missing_token(
+        self, client: TestClient, valid_wappi_payload: dict[str, Any],
+    ) -> None:
+        """Test wappi webhook rejects missing token when configured."""
+        with patch("routers.wappi.settings") as mock_settings:
+            mock_settings.wappi_webhook_token = "correct-secret-token"
+
+            response = client.post(
+                "/webhook/wappi",
+                json=valid_wappi_payload,
+                # No X-Webhook-Token header
+            )
+
+            assert response.status_code == 403
+
+    def test_wappi_webhook_auth_success_with_correct_token(
+        self, client: TestClient, valid_wappi_payload: dict[str, Any],
+        mock_wappi_incoming: AsyncMock, mock_orchestrator: AsyncMock,
+        mock_wappi_outgoing: AsyncMock,
+    ) -> None:
+        """Test wappi webhook accepts correct token."""
+        mock_wappi_incoming.process_message.return_value = ("1234567890", "+1234567890")
+        mock_orchestrator.process.return_value = MagicMock(
+            text="OK", should_send=True,
+        )
+        mock_wappi_outgoing.send_message.return_value = True
+
+        with patch("routers.wappi.settings") as mock_settings:
+            mock_settings.wappi_webhook_token = "correct-secret-token"
+
+            response = client.post(
+                "/webhook/wappi",
+                json=valid_wappi_payload,
+                headers={"X-Webhook-Token": "correct-secret-token"},
+            )
+
+            assert response.status_code == 200
+
+    def test_wappi_webhook_auth_skipped_when_not_configured(
+        self, client: TestClient, valid_wappi_payload: dict[str, Any],
+        mock_wappi_incoming: AsyncMock, mock_orchestrator: AsyncMock,
+        mock_wappi_outgoing: AsyncMock,
+    ) -> None:
+        """Test wappi webhook skips auth when token is empty."""
+        mock_wappi_incoming.process_message.return_value = ("1234567890", "+1234567890")
+        mock_orchestrator.process.return_value = MagicMock(
+            text="OK", should_send=True,
+        )
+        mock_wappi_outgoing.send_message.return_value = True
+
+        with patch("routers.wappi.settings") as mock_settings:
+            mock_settings.wappi_webhook_token = ""  # Not configured
+
+            response = client.post(
+                "/webhook/wappi",
+                json=valid_wappi_payload,
+                # No header needed
+            )
+
+            assert response.status_code == 200
+
+    def test_bitrix_webhook_auth_failure_with_wrong_token(
+        self, client: TestClient, valid_bitrix_payload: dict[str, Any],
+    ) -> None:
+        """Test bitrix webhook rejects invalid token when configured."""
+        with patch("routers.bitrix.settings") as mock_settings:
+            mock_settings.bitrix24_webhook_token = "bitrix-secret-token"
+
+            response = client.post(
+                "/webhook/bitrix",
+                json=valid_bitrix_payload,
+                headers={"X-Webhook-Token": "wrong-token"},
+            )
+
+            assert response.status_code == 403
+
+    def test_bitrix_webhook_auth_success_with_correct_token(
+        self, client: TestClient, valid_bitrix_payload: dict[str, Any],
+    ) -> None:
+        """Test bitrix webhook accepts correct token."""
+        with patch("routers.bitrix.settings") as mock_settings:
+            mock_settings.bitrix24_webhook_token = "bitrix-secret-token"
+
+            response = client.post(
+                "/webhook/bitrix",
+                json=valid_bitrix_payload,
+                headers={"X-Webhook-Token": "bitrix-secret-token"},
+            )
+
+            assert response.status_code == 200
+
+
+class TestPerChatRateLimiting:
+    """Tests for per-chat rate limiting (10 req/min per chat)."""
+
+    def test_per_chat_rate_limit_allows_normal_traffic(
+        self, client: TestClient,
+        mock_wappi_incoming: AsyncMock, mock_orchestrator: AsyncMock,
+        mock_wappi_outgoing: AsyncMock,
+    ) -> None:
+        """Test that normal traffic is not rate-limited."""
+        mock_wappi_incoming.process_message.return_value = ("chat_1", "+phone")
+        mock_orchestrator.process.return_value = MagicMock(
+            text="Hi", should_send=True,
+        )
+        mock_wappi_outgoing.send_message.return_value = True
+
+        # Send 5 messages from same chat — should all pass
+        for i in range(5):
+            payload = {
+                "message_type": "text",
+                "from": "+1234567890",
+                "body": f"Message {i}",
+                "message_id": f"msg_chat_rl_{i}",
+                "timestamp": 1700000000 + i,
+                "chat_id": "chat_rate_test",
+            }
+            response = client.post("/webhook/wappi", json=payload)
+            assert response.status_code == 200
+
+    def test_per_chat_rate_limit_exceeded(
+        self, client: TestClient,
+        mock_wappi_incoming: AsyncMock, mock_orchestrator: AsyncMock,
+        mock_wappi_outgoing: AsyncMock,
+    ) -> None:
+        """Test that 11th message from same chat is rejected with 429."""
+        mock_wappi_incoming.process_message.return_value = ("chat_1", "+phone")
+        mock_orchestrator.process.return_value = MagicMock(
+            text="Hi", should_send=True,
+        )
+        mock_wappi_outgoing.send_message.return_value = True
+
+        chat_id = "chat_flood_test"
+
+        # Send 10 messages — should all pass
+        for i in range(10):
+            payload = {
+                "message_type": "text",
+                "from": "+1234567890",
+                "body": f"Message {i}",
+                "message_id": f"msg_flood_{i}",
+                "timestamp": 1700000000 + i,
+                "chat_id": chat_id,
+            }
+            response = client.post("/webhook/wappi", json=payload)
+            assert response.status_code == 200, f"Message {i} should pass"
+
+        # 11th message should be rate limited
+        payload = {
+            "message_type": "text",
+            "from": "+1234567890",
+            "body": "Too many messages",
+            "message_id": "msg_flood_11",
+            "timestamp": 1700000011,
+            "chat_id": chat_id,
+        }
+        response = client.post("/webhook/wappi", json=payload)
+        assert response.status_code == 429
+        assert "Too many messages" in response.json()["detail"]
+
+    def test_per_chat_rate_limit_different_chats_independent(
+        self, client: TestClient,
+        mock_wappi_incoming: AsyncMock, mock_orchestrator: AsyncMock,
+        mock_wappi_outgoing: AsyncMock,
+    ) -> None:
+        """Test that rate limits are per-chat, not global."""
+        mock_wappi_incoming.process_message.return_value = ("chat_x", "+phone")
+        mock_orchestrator.process.return_value = MagicMock(
+            text="Hi", should_send=True,
+        )
+        mock_wappi_outgoing.send_message.return_value = True
+
+        # Fill up chat_a with 10 messages
+        for i in range(10):
+            payload = {
+                "message_type": "text",
+                "from": "+1234567890",
+                "body": f"Message {i}",
+                "message_id": f"msg_a_{i}",
+                "timestamp": 1700000000 + i,
+                "chat_id": "chat_a_independent",
+            }
+            response = client.post("/webhook/wappi", json=payload)
+            assert response.status_code == 200
+
+        # chat_b should still work fine
+        payload = {
+            "message_type": "text",
+            "from": "+9876543210",
+            "body": "Message from different chat",
+            "message_id": "msg_b_0",
+            "timestamp": 1700000000,
+            "chat_id": "chat_b_independent",
+        }
+        response = client.post("/webhook/wappi", json=payload)
+        assert response.status_code == 200
+
+
+class TestPerChatLocking:
+    """Tests for per-chat async locking."""
+
+    def test_chat_lock_created_per_chat(self) -> None:
+        """Test that get_chat_lock returns same lock for same chat_id."""
+        from routers.wappi import get_chat_lock
+
+        lock1 = get_chat_lock("chat_123")
+        lock2 = get_chat_lock("chat_123")
+        lock3 = get_chat_lock("chat_456")
+
+        assert lock1 is lock2  # Same lock for same chat
+        assert lock1 is not lock3  # Different lock for different chat
 
 
 class TestAppInitialization:
@@ -397,7 +618,6 @@ class TestWappiWebhookIntegration:
         mock_wappi_outgoing: AsyncMock
     ) -> None:
         """Test full flow: message -> orchestrator -> response."""
-        # Setup mocks for full flow
         mock_wappi_incoming.process_message.return_value = ("1234567890", "+1234567890")
         mock_orchestrator.process.return_value = MagicMock(
             text="Module overview: Learn basics...",
@@ -409,11 +629,7 @@ class TestWappiWebhookIntegration:
         response = client.post("/webhook/wappi", json=valid_wappi_payload)
 
         assert response.status_code == 200
-
-        # Verify orchestrator was called
         assert mock_orchestrator.process.called
-
-        # Verify message was sent
         assert mock_wappi_outgoing.send_message.called
 
     def test_wappi_webhook_silent_response(
@@ -422,7 +638,6 @@ class TestWappiWebhookIntegration:
         mock_wappi_outgoing: AsyncMock
     ) -> None:
         """Test silent response (should_send=False) doesn't send message."""
-        # Setup mocks for silent response (confirmation)
         mock_wappi_incoming.process_message.return_value = ("1234567890", "+1234567890")
         mock_orchestrator.process.return_value = MagicMock(
             text="",
@@ -432,6 +647,4 @@ class TestWappiWebhookIntegration:
         response = client.post("/webhook/wappi", json=valid_wappi_payload)
 
         assert response.status_code == 200
-
-        # Verify message was NOT sent
         assert not mock_wappi_outgoing.send_message.called or mock_wappi_outgoing.send_message.call_count == 0

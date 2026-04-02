@@ -45,7 +45,7 @@ jobs:
       - name: Lint with ruff
         run: |
           pip install ruff
-          ruff check . --exit-zero
+          ruff check .
 
       - name: Type check with pyright
         run: |

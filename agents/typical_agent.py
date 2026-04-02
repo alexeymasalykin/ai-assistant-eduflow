@@ -1,28 +1,12 @@
 from __future__ import annotations
 
-import re
-
 import structlog
 
+from agents.classifier import CONFIRMATION_PATTERNS, GREETING_PATTERNS, THANKS_PATTERNS
 from agents.types import AgentResponse, MessageType
 from prompts.faq_templates import get_faq_response
 
 logger = structlog.get_logger()
-
-MAX_TYPICAL_LENGTH = 60
-
-GREETING_PATTERNS = re.compile(
-    r"^(привет|здравствуй|добрый\s+(день|вечер|утро)|hi|hello|хай)\s*[!.]?$",
-    re.IGNORECASE,
-)
-THANKS_PATTERNS = re.compile(
-    r"^(спасибо|благодарю|спс|thanks|thank you)\s*[!.]?$",
-    re.IGNORECASE,
-)
-CONFIRMATION_PATTERNS = re.compile(
-    r"^(ок|ok|хорошо|понял|принял|ладно|ясно|понятно|да|ага|угу)\s*[!.]?$",
-    re.IGNORECASE,
-)
 
 
 class TypicalAgent:

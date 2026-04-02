@@ -66,9 +66,10 @@ class TestMigrationContent:
 
         assert "user_mappings" in content, "Migration should create user_mappings table"
         assert "wappi_chat_id" in content, "user_mappings should have wappi_chat_id column"
-        assert "user_phone" in content, "user_mappings should have user_phone column"
-        assert "user_name" in content, "user_mappings should have user_name column"
-        assert "deal_id" in content, "user_mappings should have deal_id column"
+        assert "bitrix_deal_id" in content, "user_mappings should have bitrix_deal_id column"
+        assert "bitrix_contact_id" in content, "user_mappings should have bitrix_contact_id column"
+        assert "channel" in content, "user_mappings should have channel column"
+        assert "phone" in content, "user_mappings should have phone column"
         assert "created_at" in content, "user_mappings should have created_at column"
         assert "updated_at" in content, "user_mappings should have updated_at column"
 
@@ -78,11 +79,10 @@ class TestMigrationContent:
         content = migration_path.read_text()
 
         assert "dialog_logs" in content, "Migration should create dialog_logs table"
-        assert "user_id" in content, "dialog_logs should have user_id column"
-        assert "message_type" in content, "dialog_logs should have message_type column"
-        assert "incoming_text" in content, "dialog_logs should have incoming_text column"
-        assert "outgoing_text" in content, "dialog_logs should have outgoing_text column"
-        assert "agent_used" in content, "dialog_logs should have agent_used column"
+        assert "wappi_chat_id" in content, "dialog_logs should have wappi_chat_id column"
+        assert "role" in content, "dialog_logs should have role column"
+        assert "message" in content, "dialog_logs should have message column"
+        assert "agent_type" in content, "dialog_logs should have agent_type column"
 
     def test_migration_file_contains_create_analytics(self) -> None:
         """Test that migration creates analytics table."""
@@ -90,26 +90,25 @@ class TestMigrationContent:
         content = migration_path.read_text()
 
         assert "analytics" in content, "Migration should create analytics table"
-        assert "message_date" in content, "analytics should have message_date column"
-        assert "message_count" in content, "analytics should have message_count column"
-        assert "escalation_count" in content, "analytics should have escalation_count column"
+        assert "agent_type" in content, "analytics should have agent_type column"
+        assert "response_time_ms" in content, "analytics should have response_time_ms column"
+        assert "success" in content, "analytics should have success column"
 
-    def test_migration_file_contains_foreign_key(self) -> None:
-        """Test that migration creates foreign key constraint."""
+    def test_migration_dialog_logs_no_foreign_key(self) -> None:
+        """Test that dialog_logs does NOT have a FK to user_mappings."""
         migration_path = Path(__file__).parent.parent.parent / "alembic" / "versions" / "001_create_initial_schema.py"
         content = migration_path.read_text()
 
-        assert "ForeignKey" in content or "foreign_key" in content.lower(), "Migration should have foreign key"
-        assert "user_mappings.id" in content, "dialog_logs should reference user_mappings.id"
+        assert "ForeignKey" not in content, "dialog_logs should NOT have a foreign key"
 
     def test_migration_file_contains_indexes(self) -> None:
         """Test that migration creates required indexes."""
         migration_path = Path(__file__).parent.parent.parent / "alembic" / "versions" / "001_create_initial_schema.py"
         content = migration_path.read_text()
 
-        assert "ix_user_mappings_deal_id" in content, "Missing index on deal_id"
-        assert "ix_dialog_logs_user_id" in content, "Missing index on user_id"
-        assert "ix_analytics_message_date" in content, "Missing index on message_date"
+        assert "ix_user_mappings_deal_id" in content, "Missing index on bitrix_deal_id"
+        assert "ix_dialog_logs_wappi_chat_id" in content, "Missing index on wappi_chat_id"
+        assert "ix_analytics_created_at" in content, "Missing index on created_at"
 
     def test_migration_file_contains_unique_constraint(self) -> None:
         """Test that migration has unique constraints."""
@@ -193,19 +192,12 @@ class TestMigrationSchema:
         assert "sa.String" in content, "Should use String for varchar columns"
         assert "sa.DateTime" in content, "Should use DateTime for timestamps"
 
-    def test_dialog_logs_has_foreign_key_cascade(self) -> None:
-        """Test that dialog_logs FK has CASCADE delete."""
+    def test_analytics_is_per_request(self) -> None:
+        """Test that analytics tracks per-request data, not daily aggregation."""
         migration_path = Path(__file__).parent.parent.parent / "alembic" / "versions" / "001_create_initial_schema.py"
         content = migration_path.read_text()
 
-        assert "ondelete" in content or "CASCADE" in content, "FK should have CASCADE delete"
-
-    def test_analytics_has_date_column(self) -> None:
-        """Test that analytics has Date column, not DateTime."""
-        migration_path = Path(__file__).parent.parent.parent / "alembic" / "versions" / "001_create_initial_schema.py"
-        content = migration_path.read_text()
-
-        # Find analytics section and check it uses sa.Date
-        analytics_start = content.find('analytics')
-        analytics_section = content[analytics_start:analytics_start + 1000]
-        assert "sa.Date" in analytics_section, "analytics should use sa.Date for message_date"
+        assert "response_time_ms" in content, "analytics should have response_time_ms for per-request tracking"
+        assert "sa.Boolean" in content, "analytics should have Boolean success column"
+        assert "message_date" not in content, "analytics should NOT have message_date (not daily aggregation)"
+        assert "message_count" not in content, "analytics should NOT have message_count (not daily aggregation)"

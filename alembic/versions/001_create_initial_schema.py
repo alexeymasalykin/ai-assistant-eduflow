@@ -5,9 +5,9 @@ Revises:
 Create Date: 2026-04-02 12:00:00.000000
 
 This migration creates the initial database schema with three tables:
-- user_mappings: Maps Wappi chat IDs to users and Bitrix deals
-- dialog_logs: Logs all incoming/outgoing messages and agent interactions
-- analytics: Daily message and escalation statistics
+- user_mappings: Maps Wappi chat IDs to Bitrix deals and contacts
+- dialog_logs: Logs all messages with role and agent type
+- analytics: Per-request analytics with response time and success
 """
 from __future__ import annotations
 
@@ -30,9 +30,10 @@ def upgrade() -> None:
         "user_mappings",
         sa.Column("id", sa.Integer, primary_key=True),
         sa.Column("wappi_chat_id", sa.String(255), unique=True, nullable=False),
-        sa.Column("user_phone", sa.String(20), nullable=True),
-        sa.Column("user_name", sa.String(255), nullable=True),
-        sa.Column("deal_id", sa.Integer, nullable=True),
+        sa.Column("bitrix_deal_id", sa.Integer, nullable=False),
+        sa.Column("bitrix_contact_id", sa.Integer, nullable=True),
+        sa.Column("channel", sa.String(50), nullable=False),
+        sa.Column("phone", sa.String(20), nullable=True),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -47,23 +48,17 @@ def upgrade() -> None:
         ),
     )
 
-    # Index on deal_id for filtering by deal
-    op.create_index("ix_user_mappings_deal_id", "user_mappings", ["deal_id"])
+    # Index on bitrix_deal_id for filtering by deal
+    op.create_index("ix_user_mappings_deal_id", "user_mappings", ["bitrix_deal_id"])
 
-    # dialog_logs table with foreign key to user_mappings
+    # dialog_logs table (no FK to user_mappings, uses wappi_chat_id directly)
     op.create_table(
         "dialog_logs",
         sa.Column("id", sa.Integer, primary_key=True),
-        sa.Column(
-            "user_id",
-            sa.Integer,
-            sa.ForeignKey("user_mappings.id", ondelete="CASCADE"),
-            nullable=False,
-        ),
-        sa.Column("message_type", sa.String(50), nullable=False),
-        sa.Column("incoming_text", sa.Text, nullable=True),
-        sa.Column("outgoing_text", sa.Text, nullable=True),
-        sa.Column("agent_used", sa.String(50), nullable=True),
+        sa.Column("wappi_chat_id", sa.String(255), nullable=False),
+        sa.Column("role", sa.String(50), nullable=False),
+        sa.Column("message", sa.Text, nullable=False),
+        sa.Column("agent_type", sa.String(50), nullable=True),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -72,16 +67,16 @@ def upgrade() -> None:
         ),
     )
 
-    # Index on user_id for filtering logs by user
-    op.create_index("ix_dialog_logs_user_id", "dialog_logs", ["user_id"])
+    # Index on wappi_chat_id for filtering logs by chat
+    op.create_index("ix_dialog_logs_wappi_chat_id", "dialog_logs", ["wappi_chat_id"])
 
-    # analytics table for daily statistics
+    # analytics table — per-request tracking
     op.create_table(
         "analytics",
         sa.Column("id", sa.Integer, primary_key=True),
-        sa.Column("message_date", sa.Date, nullable=False, unique=True),
-        sa.Column("message_count", sa.Integer, default=0, nullable=False),
-        sa.Column("escalation_count", sa.Integer, default=0, nullable=False),
+        sa.Column("agent_type", sa.String(50), nullable=False),
+        sa.Column("response_time_ms", sa.Integer, nullable=True),
+        sa.Column("success", sa.Boolean, nullable=False),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -90,8 +85,8 @@ def upgrade() -> None:
         ),
     )
 
-    # Index on message_date (unique constraint already exists)
-    op.create_index("ix_analytics_message_date", "analytics", ["message_date"], unique=True)
+    # Index on created_at for time-range queries
+    op.create_index("ix_analytics_created_at", "analytics", ["created_at"])
 
 
 def downgrade() -> None:

@@ -120,18 +120,8 @@ class WappiIncomingHandler:
             logger.info("user_mapping_created_from_bitrix_deal", chat_id=chat_id, deal_id=deal_id)
             return (chat_id, phone)
 
-        # 3. Create new mapping for new user (without deal)
-        await self._pool.execute(
-            """INSERT INTO user_mappings (wappi_chat_id, channel, phone)
-               VALUES ($1, $2, $3)
-               ON CONFLICT (wappi_chat_id) DO UPDATE SET
-                 phone = EXCLUDED.phone,
-                 updated_at = NOW()""",
-            chat_id,
-            "telegram",
-            phone,
-        )
-        logger.info("user_mapping_created_new_user", chat_id=chat_id, phone=phone)
+        # 3. New user without a known deal — escalate (no mapping created)
+        logger.info("user_mapping_no_deal_found", chat_id=chat_id, phone=phone)
         return (chat_id, phone)
 
     async def process_message(self, payload: dict[str, Any]) -> tuple[str, str] | None:
@@ -173,13 +163,12 @@ class WappiIncomingHandler:
 
         # Log incoming message
         await self._pool.execute(
-            """INSERT INTO dialog_logs (wappi_chat_id, role, message, agent_type, metadata)
-               VALUES ($1, $2, $3, $4, $5)""",
+            """INSERT INTO dialog_logs (wappi_chat_id, role, message, agent_type)
+               VALUES ($1, $2, $3, $4)""",
             chat_id_result,
             "user",
             body,
             None,
-            {"message_id": message_id, "message_type": message_type, "timestamp": timestamp},
         )
 
         logger.info(

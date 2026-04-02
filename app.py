@@ -17,14 +17,16 @@ import httpx
 import structlog
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from slowapi import Limiter
-from slowapi.util import get_remote_address
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+
+from rate_limiter import limiter
 
 from config import settings
 from integrations.database import Database
 from integrations.bitrix_client import BitrixClient
-from integrations.llm_client import LLMClient
+from integrations.llm_client import LLMClient, create_llm_client
 from integrations.vector_db import VectorDB
 from integrations.wappi import WappiIncomingHandler, WappiOutgoingHandler
 from agents.orchestrator import Orchestrator
@@ -85,8 +87,8 @@ async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
 
         # Initialize LLM client
         logger.info("initializing_llm_client", provider=settings.llm_provider.value)
-        llm_client = LLMClient(
-            provider=settings.llm_provider,
+        llm_client = create_llm_client(
+            provider=settings.llm_provider.value,
             openai_api_key=settings.openai_api_key,
             yandex_api_key=settings.yandex_api_key,
             yandex_folder_id=settings.yandex_folder_id,
@@ -95,15 +97,18 @@ async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
         # Initialize vector DB
         logger.info("initializing_vector_db")
         vector_db = VectorDB(
-            db_path="data/chroma_db",
-            openai_api_key=settings.openai_embeddings_api_key,
+            embeddings_api_key=settings.openai_embeddings_api_key,
+            persist_dir="data/chroma_db",
         )
+
+        # Index knowledge base (idempotent — safe to run on every startup)
+        indexed = await vector_db.index_knowledge_base()
+        logger.info("knowledge_base_indexed", documents=indexed)
 
         # Initialize Bitrix client
         logger.info("initializing_bitrix_client")
         bitrix_client = BitrixClient(
             webhook_url=settings.bitrix24_webhook_url,
-            http_client=http_client,
         )
 
         # Initialize Wappi handlers
@@ -168,26 +173,16 @@ app = FastAPI(
     description="AI-powered learning assistant for course management",
     version="1.0.0",
     lifespan=lifespan,
+    debug=False,
 )
 
 # ============================================================================
 # Rate Limiting
 # ============================================================================
 
-limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
-
-
-@app.exception_handler(RateLimitExceeded)
-async def rate_limit_exception_handler(
-    request: Request, exc: RateLimitExceeded
-) -> JSONResponse:
-    """Handle rate limit exceeded errors."""
-    logger.warning("rate_limit_exceeded", path=request.url.path)
-    return JSONResponse(
-        status_code=429,
-        content={"error": "Too many requests"},
-    )
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 
 # ============================================================================
