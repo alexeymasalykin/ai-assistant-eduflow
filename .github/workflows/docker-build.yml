@@ -33,7 +33,7 @@ jobs:
 
       - name: Start services with docker-compose
         run: |
-          docker-compose -f docker-compose.prod.yml up -d --build
+          docker compose -f docker-compose.prod.yml up -d --build
         env:
           COMPOSE_FILE: docker-compose.prod.yml
 
@@ -80,4 +80,4 @@ jobs:
       - name: Stop services
         if: always()
         run: |
-          docker-compose -f docker-compose.prod.yml down -v
+          docker compose -f docker-compose.prod.yml down -v

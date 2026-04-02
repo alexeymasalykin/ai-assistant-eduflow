@@ -30,9 +30,9 @@ jobs:
 
       - name: Run Bandit security check
         run: |
-          pip install bandit
-          bandit -r . -f json -o bandit-report.json || true
-          bandit -r . --severity-level medium
+          pip install bandit[sarif]
+          bandit -r . -x ./tests -f sarif -o bandit-report.sarif || true
+          bandit -r . -x ./tests --severity-level medium
 
       - name: Run Gitleaks secret scanning
         uses: gitleaks/gitleaks-action@v2
@@ -48,6 +48,6 @@ jobs:
         if: always()
         uses: github/codeql-action/upload-sarif@v2
         with:
-          sarif_file: bandit-report.json
+          sarif_file: bandit-report.sarif
           category: bandit
           wait-for-processing: true
