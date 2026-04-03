@@ -107,7 +107,7 @@ class WappiIncomingHandler:
         chat_id: str,
         phone: str,
         channel: Channel = Channel.TELEGRAM,
-    ) -> tuple[str, str]:
+    ) -> tuple[str, str, int | None]:
         """Find existing user mapping or create new one.
 
         Strategy:
@@ -120,7 +120,7 @@ class WappiIncomingHandler:
             phone: Sender phone number.
 
         Returns:
-            Tuple of (user_id_or_chat_id, phone).
+            Tuple of (user_id_or_chat_id, phone, deal_id).
         """
         # 1. Find existing by chat_id
         existing = await self._pool.fetchrow(
@@ -130,7 +130,7 @@ class WappiIncomingHandler:
 
         if existing:
             logger.info("user_mapping_found_by_chat_id", chat_id=chat_id)
-            return (chat_id, phone)
+            return (chat_id, phone, existing["bitrix_deal_id"])
 
         # 2. Find by phone in Bitrix
         deals = await self._bitrix.find_deals_by_phone(phone)
@@ -154,13 +154,13 @@ class WappiIncomingHandler:
                 phone,
             )
             logger.info("user_mapping_created_from_bitrix_deal", chat_id=chat_id, deal_id=deal_id)
-            return (chat_id, phone)
+            return (chat_id, phone, int(deal_id) if deal_id else None)
 
         # 3. New user without a known deal — escalate (no mapping created)
         logger.info("user_mapping_no_deal_found", chat_id=chat_id, phone=phone)
-        return (chat_id, phone)
+        return (chat_id, phone, None)
 
-    async def process_message(self, payload: dict[str, Any]) -> tuple[str, str] | None:
+    async def process_message(self, payload: dict[str, Any]) -> tuple[str, str, int | None] | None:
         """Process incoming Wappi webhook message.
 
         Supports Telegram and MAX Messenger channels. Channel is detected
@@ -170,7 +170,7 @@ class WappiIncomingHandler:
             payload: Webhook payload from Wappi.
 
         Returns:
-            Tuple of (chat_id, phone) if processed successfully, None if duplicate.
+            Tuple of (chat_id, phone, deal_id) if processed successfully, None if duplicate.
 
         Raises:
             KeyError: If required field is missing.
@@ -198,7 +198,7 @@ class WappiIncomingHandler:
         self._add_to_dedup_cache(message_id)
 
         # Find or create user mapping
-        chat_id_result, phone_result = await self._find_or_create_user_mapping(
+        chat_id_result, phone_result, deal_id = await self._find_or_create_user_mapping(
             chat_id=chat_id,
             phone=phone,
             channel=channel,
@@ -222,4 +222,4 @@ class WappiIncomingHandler:
             channel=channel.value,
         )
 
-        return (chat_id_result, phone_result)
+        return (chat_id_result, phone_result, deal_id)

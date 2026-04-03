@@ -132,7 +132,7 @@ class TestWappiWebhook:
         mock_wappi_outgoing: AsyncMock
     ) -> None:
         """Test processing valid Wappi message returns 200."""
-        mock_wappi_incoming.process_message.return_value = ("1234567890", "+1234567890")
+        mock_wappi_incoming.process_message.return_value = ("1234567890", "+1234567890", None)
         mock_orchestrator.process.return_value = MagicMock(
             text="Hello! How can I help?",
             should_send=True,
@@ -267,7 +267,7 @@ class TestErrorHandling:
     ) -> None:
         """Test global exception handler doesn't leak stack traces."""
         mock_orchestrator.process.side_effect = RuntimeError("Unexpected error")
-        mock_wappi_incoming.process_message.return_value = ("chat_id", "+phone")
+        mock_wappi_incoming.process_message.return_value = ("chat_id", "+phone", None)
 
         response = client.post(
             "/webhook/wappi",
@@ -316,7 +316,7 @@ class TestRateLimiting:
             "chat_id": "1234567890",
         }
 
-        mock_wappi_incoming.process_message.return_value = ("chat_id", "+phone")
+        mock_wappi_incoming.process_message.return_value = ("chat_id", "+phone", None)
         mock_orchestrator.process.return_value = MagicMock(text="Hi", should_send=True)
         mock_wappi_outgoing.send_message.return_value = True
 
@@ -338,7 +338,7 @@ class TestRateLimiting:
             "chat_id": "1234567890",
         }
 
-        mock_wappi_incoming.process_message.return_value = ("chat_id", "+phone")
+        mock_wappi_incoming.process_message.return_value = ("chat_id", "+phone", None)
         mock_orchestrator.process.return_value = MagicMock(text="Hi", should_send=True)
         mock_wappi_outgoing.send_message.return_value = True
 
@@ -388,7 +388,7 @@ class TestWebhookTokenAuth:
         mock_wappi_outgoing: AsyncMock,
     ) -> None:
         """Test wappi webhook accepts correct token."""
-        mock_wappi_incoming.process_message.return_value = ("1234567890", "+1234567890")
+        mock_wappi_incoming.process_message.return_value = ("1234567890", "+1234567890", None)
         mock_orchestrator.process.return_value = MagicMock(
             text="OK", should_send=True,
         )
@@ -411,7 +411,7 @@ class TestWebhookTokenAuth:
         mock_wappi_outgoing: AsyncMock,
     ) -> None:
         """Test wappi webhook skips auth when token is empty."""
-        mock_wappi_incoming.process_message.return_value = ("1234567890", "+1234567890")
+        mock_wappi_incoming.process_message.return_value = ("1234567890", "+1234567890", None)
         mock_orchestrator.process.return_value = MagicMock(
             text="OK", should_send=True,
         )
@@ -468,7 +468,7 @@ class TestPerChatRateLimiting:
         mock_wappi_outgoing: AsyncMock,
     ) -> None:
         """Test that normal traffic is not rate-limited."""
-        mock_wappi_incoming.process_message.return_value = ("chat_1", "+phone")
+        mock_wappi_incoming.process_message.return_value = ("chat_1", "+phone", None)
         mock_orchestrator.process.return_value = MagicMock(
             text="Hi", should_send=True,
         )
@@ -493,7 +493,7 @@ class TestPerChatRateLimiting:
         mock_wappi_outgoing: AsyncMock,
     ) -> None:
         """Test that 11th message from same chat is rejected with 429."""
-        mock_wappi_incoming.process_message.return_value = ("chat_1", "+phone")
+        mock_wappi_incoming.process_message.return_value = ("chat_1", "+phone", None)
         mock_orchestrator.process.return_value = MagicMock(
             text="Hi", should_send=True,
         )
@@ -533,7 +533,7 @@ class TestPerChatRateLimiting:
         mock_wappi_outgoing: AsyncMock,
     ) -> None:
         """Test that rate limits are per-chat, not global."""
-        mock_wappi_incoming.process_message.return_value = ("chat_x", "+phone")
+        mock_wappi_incoming.process_message.return_value = ("chat_x", "+phone", None)
         mock_orchestrator.process.return_value = MagicMock(
             text="Hi", should_send=True,
         )
@@ -618,7 +618,7 @@ class TestWappiWebhookIntegration:
         mock_wappi_outgoing: AsyncMock
     ) -> None:
         """Test full flow: message -> orchestrator -> response."""
-        mock_wappi_incoming.process_message.return_value = ("1234567890", "+1234567890")
+        mock_wappi_incoming.process_message.return_value = ("1234567890", "+1234567890", 42)
         mock_orchestrator.process.return_value = MagicMock(
             text="Module overview: Learn basics...",
             should_send=True,
@@ -630,6 +630,8 @@ class TestWappiWebhookIntegration:
 
         assert response.status_code == 200
         assert mock_orchestrator.process.called
+        # Verify deal_id=42 was passed to pipeline.process
+        mock_orchestrator.process.assert_called_once_with(valid_wappi_payload["body"], deal_id=42)
         assert mock_wappi_outgoing.send_message.called
 
     def test_wappi_webhook_silent_response(
@@ -638,7 +640,7 @@ class TestWappiWebhookIntegration:
         mock_wappi_outgoing: AsyncMock
     ) -> None:
         """Test silent response (should_send=False) doesn't send message."""
-        mock_wappi_incoming.process_message.return_value = ("1234567890", "+1234567890")
+        mock_wappi_incoming.process_message.return_value = ("1234567890", "+1234567890", None)
         mock_orchestrator.process.return_value = MagicMock(
             text="",
             should_send=False,

@@ -231,11 +231,11 @@ async def wappi_webhook(
                 )
                 return {"status": "ok"}
 
-            chat_id, phone = result
+            chat_id, phone, deal_id = result
 
             # Route to pipeline (original Orchestrator or LangChain)
             logger.info("wappi_webhook_routing_to_pipeline", chat_id=chat_id)
-            agent_response = await pipeline.process(payload.body)
+            agent_response = await pipeline.process(payload.body, deal_id=deal_id)
 
             # Send response if should_send=True
             if agent_response.should_send and agent_response.text:

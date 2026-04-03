@@ -87,7 +87,7 @@ async def test_parse_incoming_valid_text_message(
 
     assert result is not None
     assert isinstance(result, tuple)
-    assert len(result) == 2  # (user_id/chat_id, phone)
+    assert len(result) == 3  # (chat_id, phone, deal_id)
 
 
 # ============================================================================
