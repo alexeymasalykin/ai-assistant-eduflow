@@ -8,7 +8,7 @@
 
 ## Context
 
-EduFlow AI Assistant — мультиагентный AI-ассистент с RAG (ChromaDB + OpenAI embeddings), оркестратором (router pattern) и интеграцией с Bitrix24 CRM. Текущая реализация: ~1,620 строк Python, 170 тестов, 84% покрытие.
+EduFlow AI Assistant — мультиагентный AI-ассистент с RAG (ChromaDB + OpenAI embeddings), оркестратором (router pattern) и интеграцией с Bitrix24 CRM. Текущая реализация: ~1,620 строк Python, 173 теста (19 файлов), 84% покрытие.
 
 Задача — добавить три технологии, востребованные в вакансиях AI/LLM Engineer:
 1. **LangChain** — параллельная реализация RAG + агентов
@@ -416,7 +416,7 @@ async def process(self, message: str, deal_id: int | None) -> AgentResponse
 
 ## Section 5: Testing Strategy
 
-- **Existing 170 tests pass unchanged** (pipeline_mode=original by default)
+- **Existing 173 tests pass unchanged** (pipeline_mode=original by default)
 - **New unit tests for `langchain_pipeline/`:** chains, retriever, pipeline routing
 - **New unit tests for `mcp_server/`:** tool invocation, error handling, response formatting
 - **Langfuse tests:** mock callback handler, verify traces are created
