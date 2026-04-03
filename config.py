@@ -11,6 +11,11 @@ class LLMProvider(str, Enum):
     YANDEX = "yandex"
 
 
+class PipelineMode(str, Enum):
+    ORIGINAL = "original"
+    LANGCHAIN = "langchain"
+
+
 class Settings(BaseSettings):
     """Application configuration with validation."""
 
@@ -43,6 +48,15 @@ class Settings(BaseSettings):
     # Logging
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     log_format: Literal["json", "console"] = "json"
+
+    # Pipeline
+    pipeline_mode: PipelineMode = PipelineMode.ORIGINAL
+
+    # Langfuse (observability)
+    langfuse_enabled: bool = False
+    langfuse_public_key: str = ""
+    langfuse_secret_key: str = ""
+    langfuse_host: str = "https://cloud.langfuse.com"
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
