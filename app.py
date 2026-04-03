@@ -21,7 +21,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 from agents.orchestrator import Orchestrator
-from config import settings
+from config import PipelineMode, settings
 from integrations.bitrix_client import BitrixClient
 from integrations.database import Database
 from integrations.llm_client import LLMClient, create_llm_client
@@ -149,6 +149,27 @@ async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
         app.state.wappi_outgoing = wappi_outgoing
         app.state.orchestrator = orchestrator
         app.state.http_client = http_client
+
+        # Pipeline selection (default: original Orchestrator)
+        if settings.pipeline_mode == PipelineMode.LANGCHAIN:
+            from langchain_pipeline.pipeline import LangChainPipeline
+            from langchain_pipeline.rag import build_retriever
+            from observability.langchain_handler import get_langfuse_handler
+
+            logger.info("initializing_langchain_pipeline")
+            lc_retriever = build_retriever(
+                embeddings_api_key=settings.openai_embeddings_api_key,
+            )
+            pipeline = LangChainPipeline(
+                llm=llm_client,
+                retriever=lc_retriever,
+                bitrix_client=bitrix_client,
+                langfuse_handler=get_langfuse_handler("langchain"),
+            )
+            app.state.pipeline = pipeline
+            logger.info("langchain_pipeline_initialized")
+        else:
+            app.state.pipeline = orchestrator
 
         logger.info("app_startup_complete")
 

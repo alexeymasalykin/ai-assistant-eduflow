@@ -82,6 +82,7 @@ def client(
     app_module.app.state.wappi_incoming = mock_wappi_incoming
     app_module.app.state.wappi_outgoing = mock_wappi_outgoing
     app_module.app.state.orchestrator = mock_orchestrator
+    app_module.app.state.pipeline = mock_orchestrator  # default: original pipeline
 
     return TestClient(app_module.app)
 

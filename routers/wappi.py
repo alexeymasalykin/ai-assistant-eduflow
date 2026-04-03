@@ -201,9 +201,9 @@ async def wappi_webhook(
     db = request.app.state.db
     wappi_incoming = request.app.state.wappi_incoming
     wappi_outgoing = request.app.state.wappi_outgoing
-    orchestrator = request.app.state.orchestrator
+    pipeline = request.app.state.pipeline
 
-    if not all([db, wappi_incoming, wappi_outgoing, orchestrator]):
+    if not all([db, wappi_incoming, wappi_outgoing, pipeline]):
         logger.warning("wappi_webhook_missing_dependencies")
         raise HTTPException(status_code=503, detail="Service unavailable")
 
@@ -235,7 +235,7 @@ async def wappi_webhook(
 
             # Route to orchestrator
             logger.info("wappi_webhook_routing_to_orchestrator", chat_id=chat_id)
-            agent_response = await orchestrator.process(payload.body)
+            agent_response = await pipeline.process(payload.body)
 
             # Send response if should_send=True
             if agent_response.should_send and agent_response.text:

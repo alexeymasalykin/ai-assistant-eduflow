@@ -99,6 +99,7 @@ async def e2e(env_setup: None) -> E2EContext:
     app.state.wappi_incoming = wappi_incoming
     app.state.wappi_outgoing = mock_wappi_outgoing
     app.state.orchestrator = orchestrator
+    app.state.pipeline = orchestrator  # default: original pipeline
     app.state.http_client = AsyncMock()
 
     async with httpx.AsyncClient(
