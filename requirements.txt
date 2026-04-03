@@ -38,7 +38,7 @@ slowapi==0.1.9
 python-multipart==0.0.22
 
 # Configuration
-pydantic-settings==2.5.2
+pydantic-settings==2.13.1
 
 # Utils
 tenacity==9.0.0
