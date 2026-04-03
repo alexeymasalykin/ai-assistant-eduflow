@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import pytest
-
 
 class TestMcpToolsKb:
     def test_search_knowledge_base_returns_formatted_results(self) -> None:

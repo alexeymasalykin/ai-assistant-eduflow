@@ -15,10 +15,10 @@ class TestPipelineSwitching:
 
     @pytest.mark.asyncio
     async def test_both_pipelines_return_agent_response(self) -> None:
+        import inspect
+
         from agents.orchestrator import Orchestrator
         from langchain_pipeline.pipeline import LangChainPipeline
-
-        import inspect
 
         orig_sig = inspect.signature(Orchestrator.process)
         lc_sig = inspect.signature(LangChainPipeline.process)

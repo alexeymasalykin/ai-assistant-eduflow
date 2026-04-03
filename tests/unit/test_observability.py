@@ -3,8 +3,6 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import patch
 
-import pytest
-
 
 class TestObserveIfEnabled:
     def test_noop_when_disabled(self) -> None:
