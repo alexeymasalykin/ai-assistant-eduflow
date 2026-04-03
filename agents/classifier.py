@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 import structlog
 
 from agents.types import MessageType
+from observability.decorators import observe_if_enabled
 from prompts.classifier import CLASSIFIER_SYSTEM_PROMPT
 
 if TYPE_CHECKING:
@@ -35,6 +36,7 @@ class ClassifierAgent:
     def __init__(self, llm_client: LLMClient) -> None:
         self._llm_client = llm_client
 
+    @observe_if_enabled(name="classifier.classify")
     async def classify(self, message: str) -> MessageType:
         message_stripped = message.strip()
         if self._is_typical(message_stripped):

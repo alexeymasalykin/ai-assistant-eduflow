@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 import structlog
 
 from agents.types import AgentResponse, MessageType
+from observability.decorators import observe_if_enabled
 from prompts.course_agent import COURSE_AGENT_SYSTEM_PROMPT
 from utils.sanitize import sanitize_llm_output
 
@@ -32,6 +33,7 @@ class CourseAgent:
         self.llm = llm
         self.bitrix = bitrix
 
+    @observe_if_enabled(name="course_agent.process")
     async def process(self, message: str, deal_id: int | None) -> AgentResponse:
         """Process course-related message using deal context.
 

@@ -9,6 +9,7 @@ from agents.course_agent import CourseAgent
 from agents.platform_agent import PlatformAgent
 from agents.types import AgentResponse, MessageType
 from agents.typical_agent import TypicalAgent
+from observability.decorators import observe_if_enabled
 from utils.sanitize import sanitize_input
 
 if TYPE_CHECKING:
@@ -53,6 +54,7 @@ class Orchestrator:
         self.course_agent = CourseAgent(llm, bitrix)
         self.platform_agent = PlatformAgent(llm, vector_db)
 
+    @observe_if_enabled(name="orchestrator.process")
     async def process(
         self, message: str, deal_id: int | None = None
     ) -> AgentResponse:

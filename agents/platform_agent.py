@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 import structlog
 
 from agents.types import AgentResponse, MessageType
+from observability.decorators import observe_if_enabled
 from prompts.platform_agent import PLATFORM_AGENT_SYSTEM_PROMPT
 from utils.sanitize import sanitize_llm_output
 
@@ -33,6 +34,7 @@ class PlatformAgent:
         self.llm = llm
         self.vector_db = vector_db
 
+    @observe_if_enabled(name="platform_agent.process")
     async def process(self, message: str) -> AgentResponse:
         """Process platform technical question using RAG knowledge base.
 
