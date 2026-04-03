@@ -21,7 +21,16 @@ def build_retriever(
     persist_dir: str = CHROMA_DB_DIR,
     k: int = 3,
 ):
-    """Build LangChain retriever backed by ChromaDB."""
+    """Build LangChain retriever backed by ChromaDB.
+
+    Uses the same embedding model (text-embedding-3-small) and search params
+    as the original VectorDB implementation for consistent results.
+
+    Args:
+        embeddings_api_key: OpenAI API key for embeddings
+        persist_dir: ChromaDB persistence directory
+        k: Number of results to return (default: 3, same as original)
+    """
     embeddings = OpenAIEmbeddings(
         api_key=embeddings_api_key,
         model="text-embedding-3-small",
@@ -39,7 +48,25 @@ def index_knowledge_base(
     embeddings_api_key: str = "",
     persist_dir: str = CHROMA_DB_DIR,
 ) -> int:
-    """Index knowledge base markdown files into ChromaDB via LangChain."""
+    """Index knowledge base markdown files into ChromaDB via LangChain.
+
+    Mirrors the original VectorDB.index_knowledge_base() logic:
+    - Loads .md files from kb_dir via TextLoader
+    - Splits into chunks (500 words, 50 overlap) via RecursiveCharacterTextSplitter
+    - Indexes into ChromaDB with cosine similarity
+
+    TextLoader chosen over UnstructuredMarkdownLoader to avoid heavy
+    `unstructured` dependency — markdown files are simple and don't
+    need structural parsing.
+
+    Args:
+        kb_dir: Directory with .md knowledge base files
+        embeddings_api_key: OpenAI API key for embeddings
+        persist_dir: ChromaDB persistence directory
+
+    Returns:
+        Number of document chunks indexed
+    """
     from langchain_community.document_loaders import TextLoader
 
     md_files = sorted(kb_dir.glob("*.md"))

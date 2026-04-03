@@ -233,8 +233,8 @@ async def wappi_webhook(
 
             chat_id, phone = result
 
-            # Route to orchestrator
-            logger.info("wappi_webhook_routing_to_orchestrator", chat_id=chat_id)
+            # Route to pipeline (original Orchestrator or LangChain)
+            logger.info("wappi_webhook_routing_to_pipeline", chat_id=chat_id)
             agent_response = await pipeline.process(payload.body)
 
             # Send response if should_send=True

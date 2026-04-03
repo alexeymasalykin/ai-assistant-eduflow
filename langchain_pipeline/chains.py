@@ -32,6 +32,14 @@ class PlatformChain:
         self._retriever = retriever
 
     async def process(self, message: str) -> AgentResponse:
+        """Process platform question using LangChain retriever + LLM.
+
+        Args:
+            message: User's incoming message text
+
+        Returns:
+            AgentResponse with answer based on RAG context, or escalate
+        """
         docs = await self._retriever.ainvoke(message)
 
         if not docs:
@@ -67,6 +75,15 @@ class CourseChain:
         self._bitrix = bitrix
 
     async def process(self, message: str, deal_id: int | None) -> AgentResponse:
+        """Process course question using Bitrix24 deal context + LLM.
+
+        Args:
+            message: User's incoming message text
+            deal_id: Bitrix24 deal ID for context
+
+        Returns:
+            AgentResponse with answer, or escalate if no deal / terminal stage
+        """
         if deal_id is None:
             logger.warning("lc_course_no_deal_id")
             return AgentResponse.escalate()
