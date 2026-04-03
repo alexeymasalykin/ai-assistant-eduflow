@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
-import pytest
+if TYPE_CHECKING:
+    from pathlib import Path
 
 from langchain_pipeline.rag import build_retriever, index_knowledge_base
 

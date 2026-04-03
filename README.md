@@ -142,6 +142,86 @@ curl http://localhost/health
 
 ---
 
+## MCP Server
+
+EduFlow предоставляет MCP-сервер (Model Context Protocol), который даёт AI-ассистентам доступ к базе знаний и CRM через стандартный протокол.
+
+### Quick Start
+
+```bash
+# Локальный запуск (stdio — для Claude Code / Cursor)
+python -m mcp_server.server
+
+# Docker (SSE — для сетевого доступа)
+docker compose -f docker-compose.prod.yml up mcp-server
+```
+
+### Подключение к Claude Code
+
+Файл `.mcp.json` в корне проекта автоматически подхватывается Claude Code:
+
+```json
+{
+  "mcpServers": {
+    "eduflow": {
+      "command": "python",
+      "args": ["-m", "mcp_server.server"]
+    }
+  }
+}
+```
+
+### Доступные инструменты
+
+| Tool | Описание |
+|------|----------|
+| `search_knowledge_base` | Поиск по базе знаний EduFlow (RAG) |
+| `get_deal` | Получить информацию о сделке из Bitrix24 CRM |
+| `find_deals_by_phone` | Найти сделки по номеру телефона |
+
+### Пример использования
+
+```
+> search_knowledge_base("Как сбросить пароль?")
+
+1. Если вы забыли пароль, нажмите на кнопку 'Забыли пароль?'
+   на странице входа. Вам будет отправлено письмо со ссылкой...
+
+2. Для восстановления пароля потребуется доступ к электронной
+   почте, с которой вы регистрировались...
+```
+
+---
+
+## LangChain Pipeline
+
+Проект содержит две параллельные реализации обработки сообщений:
+
+| Пайплайн | Описание | Переключение |
+|----------|----------|-------------|
+| **Original** (по умолчанию) | Собственная оркестрация, прямые вызовы OpenAI API | `PIPELINE_MODE=original` |
+| **LangChain** | LangChain Retriever + Chains, тот же RAG и промпты | `PIPELINE_MODE=langchain` |
+
+Обе реализации возвращают одинаковый `AgentResponse` — переключение прозрачно для клиентов.
+
+---
+
+## Langfuse Observability
+
+Трейсинг LLM-вызовов через [Langfuse](https://langfuse.com):
+
+- **Original pipeline**: `@observe` декораторы на Orchestrator, Classifier, CourseAgent, PlatformAgent
+- **LangChain pipeline**: автоматический CallbackHandler для всех chains и retrievers
+- **Dashboard**: промпты, ответы, токены, латентность, стоимость — фильтрация по `pipeline` и `user_id`
+
+```bash
+LANGFUSE_ENABLED=true
+LANGFUSE_PUBLIC_KEY=pk-...
+LANGFUSE_SECRET_KEY=sk-...
+```
+
+---
+
 ## API Endpoints
 
 ### POST `/webhook/wappi` — Telegram/WhatsApp
