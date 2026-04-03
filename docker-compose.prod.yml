@@ -52,6 +52,15 @@ services:
       LOG_FORMAT: ${LOG_FORMAT:-json}
       RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-100}
 
+      # Pipeline
+      PIPELINE_MODE: ${PIPELINE_MODE:-original}
+
+      # Langfuse (optional)
+      LANGFUSE_ENABLED: ${LANGFUSE_ENABLED:-false}
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+      LANGFUSE_HOST: ${LANGFUSE_HOST:-https://cloud.langfuse.com}
+
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
@@ -90,6 +99,26 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+
+  # MCP Server (knowledge base + CRM tools)
+  mcp-server:
+    build: .
+    container_name: eduflow_mcp
+    command: ["python", "-m", "mcp_server.server", "--transport", "sse"]
+    environment:
+      OPENAI_EMBEDDINGS_API_KEY: ${OPENAI_EMBEDDINGS_API_KEY}
+      BITRIX24_WEBHOOK_URL: ${BITRIX24_WEBHOOK_URL}
+      POSTGRES_DSN: postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/ai_assistant_eduflow
+    ports:
+      - "127.0.0.1:8001:8001"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - eduflow_network
+    volumes:
+      - chroma_data:/app/data/chroma_db
+    restart: unless-stopped
 
 # Persistent volumes
 volumes:
