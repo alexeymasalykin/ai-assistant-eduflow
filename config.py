@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Literal
 
-from pydantic import model_validator
+from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -22,15 +22,15 @@ class Settings(BaseSettings):
 
     # LLM
     llm_provider: LLMProvider = LLMProvider.OPENAI
-    openai_api_key: str = ""
-    yandex_api_key: str = ""
+    openai_api_key: SecretStr = SecretStr("")
+    yandex_api_key: SecretStr = SecretStr("")
     yandex_folder_id: str = ""
 
     # Bitrix24
     bitrix24_webhook_url: str = ""
 
     # Wappi
-    wappi_api_token: str = ""
+    wappi_api_token: SecretStr = SecretStr("")
     wappi_profile_id: str = ""
     wappi_max_profile_id: str = ""  # Profile ID for MAX Messenger in Wappi
 
@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     postgres_dsn: str = ""
 
     # Embeddings
-    openai_embeddings_api_key: str = ""
+    openai_embeddings_api_key: SecretStr = SecretStr("")
 
     # Security
     wappi_webhook_token: str = ""
@@ -56,7 +56,7 @@ class Settings(BaseSettings):
     # Langfuse (observability)
     langfuse_enabled: bool = False
     langfuse_public_key: str = ""
-    langfuse_secret_key: str = ""
+    langfuse_secret_key: SecretStr = SecretStr("")
     langfuse_host: str = "https://cloud.langfuse.com"
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
