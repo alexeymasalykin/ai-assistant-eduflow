@@ -62,7 +62,7 @@ class Settings(BaseSettings):
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
     @model_validator(mode="after")
-    def _enforce_production_secrets(self) -> "Settings":
+    def _enforce_production_secrets(self) -> Settings:
         """Require all security tokens when running in production (log_format=json).
 
         Crashes on startup if any token is missing, preventing silent auth bypass.
