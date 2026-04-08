@@ -15,6 +15,7 @@ from contextlib import asynccontextmanager
 import httpx
 import structlog
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -101,15 +102,15 @@ async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
         logger.info("initializing_llm_client", provider=settings.llm_provider.value)
         llm_client = create_llm_client(
             provider=settings.llm_provider.value,
-            openai_api_key=settings.openai_api_key,
-            yandex_api_key=settings.yandex_api_key,
+            openai_api_key=settings.openai_api_key.get_secret_value(),
+            yandex_api_key=settings.yandex_api_key.get_secret_value(),
             yandex_folder_id=settings.yandex_folder_id,
         )
 
         # Initialize vector DB
         logger.info("initializing_vector_db")
         vector_db = VectorDB(
-            embeddings_api_key=settings.openai_embeddings_api_key,
+            embeddings_api_key=settings.openai_embeddings_api_key.get_secret_value(),
             persist_dir="data/chroma_db",
         )
 
@@ -158,7 +159,7 @@ async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
 
             logger.info("initializing_langchain_pipeline")
             lc_retriever = build_retriever(
-                embeddings_api_key=settings.openai_embeddings_api_key,
+                embeddings_api_key=settings.openai_embeddings_api_key.get_secret_value(),
             )
             pipeline = LangChainPipeline(
                 llm=llm_client,
@@ -224,6 +225,13 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[],
+    allow_credentials=False,
+    allow_methods=["POST", "GET"],
+    allow_headers=["X-Webhook-Token", "X-Admin-Key"],
+)
 
 
 # ============================================================================
@@ -243,7 +251,7 @@ async def global_exception_handler(
         "unhandled_exception",
         path=request.url.path,
         method=request.method,
-        error=str(exc),
+        error=str(exc)[:200],
         exc_type=type(exc).__name__,
     )
 

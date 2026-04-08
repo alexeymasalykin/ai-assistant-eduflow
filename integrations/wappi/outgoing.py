@@ -53,7 +53,7 @@ class WappiOutgoingHandler:
             Dictionary with Authorization and profile_id headers.
         """
         headers = {
-            "Authorization": self._config.wappi_api_token,
+            "Authorization": self._config.wappi_api_token.get_secret_value(),
             "Content-Type": "application/json",
         }
         pid = profile_id or self._config.wappi_profile_id

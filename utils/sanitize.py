@@ -6,19 +6,23 @@ MAX_MESSAGE_LENGTH = 4096
 
 _SCRIPT_TAG_RE = re.compile(r"<script[^>]*>.*?</script>", re.IGNORECASE | re.DOTALL)
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
-_SQL_INJECTION_RE = re.compile(
-    r"(\b(DROP|DELETE|INSERT|UPDATE|ALTER|CREATE|EXEC)\b\s+(TABLE|DATABASE|FROM|INTO))",
-    re.IGNORECASE,
-)
 _NULL_BYTE_RE = re.compile(r"\x00")
 
 
 _PROMPT_LEAK_PATTERNS = [
+    # English
     re.compile(
         r"(?i)^(my instructions|my prompt|i was told|i am instructed|system prompt)"
     ),
     re.compile(
         r"(?i)(here are my instructions|my rules are|i must follow)"
+    ),
+    # Russian
+    re.compile(
+        r"(?i)(мои инструкции|мой промпт|системный промпт|мне велено|мне приказано)"
+    ),
+    re.compile(
+        r"(?i)^(мои правила|я должен следовать|вот мои инструкции)"
     ),
 ]
 
@@ -47,7 +51,7 @@ def sanitize_llm_output(text: str) -> str:
 
 
 def sanitize_input(text: str) -> str:
-    """Sanitize user input: strip XSS, SQL injection patterns, null bytes, truncate."""
+    """Sanitize user input: strip XSS, null bytes, truncate."""
     text = text.strip()
     if not text:
         return ""
@@ -55,7 +59,6 @@ def sanitize_input(text: str) -> str:
     text = _NULL_BYTE_RE.sub("", text)
     text = _SCRIPT_TAG_RE.sub("", text)
     text = _HTML_TAG_RE.sub("", text)
-    text = _SQL_INJECTION_RE.sub("[FILTERED]", text)
 
     if len(text) > MAX_MESSAGE_LENGTH:
         text = text[:MAX_MESSAGE_LENGTH]

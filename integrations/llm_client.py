@@ -34,7 +34,7 @@ class OpenAIClient:
                 model=self._model,
                 messages=[
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_message},
+                    {"role": "user", "content": f"<user_message>{user_message}</user_message>"},
                 ],
                 temperature=0.3,
                 max_tokens=1024,
@@ -87,7 +87,7 @@ class YandexGPTClient:
             },
             "messages": [
                 {"role": "system", "text": system_prompt},
-                {"role": "user", "text": user_message},
+                {"role": "user", "text": f"<user_message>{user_message}</user_message>"},
             ],
         }
         headers = {

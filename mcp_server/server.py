@@ -25,7 +25,7 @@ mcp = FastMCP(
 
 # Initialize shared dependencies
 vector_db = VectorDB(
-    embeddings_api_key=settings.openai_embeddings_api_key,
+    embeddings_api_key=settings.openai_embeddings_api_key.get_secret_value(),
     persist_dir="data/chroma_db",
 )
 bitrix_client = BitrixClient(
