@@ -25,12 +25,17 @@ pytest_plugins = [
 
 
 def pytest_configure(config: pytest.Config) -> None:
-    """Register custom pytest markers."""
+    """Register custom pytest markers and set test-safe environment defaults."""
     config.addinivalue_line("markers", "unit: mark test as unit test")
     config.addinivalue_line("markers", "integration: mark test as integration test")
     config.addinivalue_line("markers", "database: mark test as database test")
     config.addinivalue_line("markers", "slow: mark test as slow (deselect with '-m \"not slow\"')")
     config.addinivalue_line("markers", "e2e: mark test as end-to-end test")
+
+    # Set LOG_FORMAT=console so Settings() instantiation at module import time
+    # does not trigger the production secrets validator during test collection.
+    # Individual tests that need production mode override this explicitly.
+    os.environ.setdefault("LOG_FORMAT", "console")
 
 
 @pytest.fixture(scope="session")
