@@ -10,11 +10,11 @@ class TestProductionSecretsEnforcement:
 
     def _prod_settings(self, **kwargs: str) -> Settings:
         """Helper: create Settings with log_format=json (production)."""
-        return Settings(_env_file=None, log_format="json", **kwargs)
+        return Settings(log_format="json", **kwargs)  # type: ignore[call-arg]
 
     def _dev_settings(self, **kwargs: str) -> Settings:
         """Helper: create Settings with log_format=console (development)."""
-        return Settings(_env_file=None, log_format="console", **kwargs)
+        return Settings(log_format="console", **kwargs)  # type: ignore[call-arg]
 
     # --- Production must reject empty tokens ---
 
