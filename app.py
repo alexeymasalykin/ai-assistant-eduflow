@@ -15,6 +15,7 @@ from contextlib import asynccontextmanager
 import httpx
 import structlog
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -224,6 +225,13 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[],
+    allow_credentials=False,
+    allow_methods=["POST", "GET"],
+    allow_headers=["X-Webhook-Token", "X-Admin-Key"],
+)
 
 
 # ============================================================================
@@ -243,7 +251,7 @@ async def global_exception_handler(
         "unhandled_exception",
         path=request.url.path,
         method=request.method,
-        error=str(exc),
+        error=str(exc)[:200],
         exc_type=type(exc).__name__,
     )
 
