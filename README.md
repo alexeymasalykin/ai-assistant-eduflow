@@ -5,7 +5,7 @@ AI-ассистент для платформы онлайн-обучения Ed
 ![Tests](https://github.com/alexeymasalykin/ai-assistant-eduflow/actions/workflows/test.yml/badge.svg)
 ![Security](https://github.com/alexeymasalykin/ai-assistant-eduflow/actions/workflows/security.yml/badge.svg)
 ![Docker](https://github.com/alexeymasalykin/ai-assistant-eduflow/actions/workflows/docker-build.yml/badge.svg)
-![Coverage](https://codecov.io/gh/alex2061/ai_assistant_eduflow/branch/main/graph/badge.svg)
+![Coverage](https://codecov.io/gh/alexeymasalykin/ai-assistant-eduflow/branch/main/graph/badge.svg)
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
